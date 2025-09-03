@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { USDT_MAINNET, WKAIA_MAINNET, WKAIA_TESTNET, type Addr } from './viem'
 
 export const REALITIO_ABI = [
   {
@@ -166,6 +167,79 @@ export const ERC20_ABI = [
     "type": "function"
   }
 ] as const
+
+export const REALITIO_ERC20_ABI = [
+  {
+    "inputs": [
+      { "internalType": "address", "name": "bondToken", "type": "address" },
+      { "internalType": "uint32", "name": "templateId", "type": "uint32" },
+      { "internalType": "string", "name": "question", "type": "string" },
+      { "internalType": "address", "name": "arbitrator", "type": "address" },
+      { "internalType": "uint32", "name": "timeout", "type": "uint32" },
+      { "internalType": "uint32", "name": "openingTs", "type": "uint32" },
+      { "internalType": "bytes32", "name": "nonce", "type": "bytes32" }
+    ],
+    "name": "askQuestionERC20",
+    "outputs": [{ "internalType": "bytes32", "name": "questionId", "type": "bytes32" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  ...REALITIO_ABI.slice(1)
+] as const
+
+export interface BondToken {
+  label: string
+  address: Addr
+  symbol: string
+  decimals: number
+}
+
+export function resolveBondTokens(chainId: number, deployments: any): BondToken[] {
+  const TOKENS: BondToken[] = []
+  
+  if (chainId === 8217) {
+    TOKENS.push({ 
+      label: 'USDT', 
+      address: USDT_MAINNET, 
+      symbol: 'USDT', 
+      decimals: 6 
+    })
+    TOKENS.push({ 
+      label: 'WKAIA', 
+      address: WKAIA_MAINNET, 
+      symbol: 'WKAIA', 
+      decimals: 18 
+    })
+  } else if (chainId === 1001) {
+    const usdtLike = deployments?.USDT || deployments?.MockUSDT
+    if (usdtLike) {
+      TOKENS.push({ 
+        label: 'USDT', 
+        address: usdtLike as Addr, 
+        symbol: 'USDT', 
+        decimals: 6 
+      })
+    }
+    TOKENS.push({ 
+      label: 'WKAIA', 
+      address: WKAIA_TESTNET, 
+      symbol: 'WKAIA', 
+      decimals: 18 
+    })
+  }
+  
+  return TOKENS
+}
+
+export async function getDeployments(chainId: number): Promise<any | null> {
+  try {
+    const response = await fetch(`/api/deployments/${chainId}`)
+    if (!response.ok) return null
+    return await response.json()
+  } catch {
+    return null
+  }
+}
 
 export async function getDeployedAddresses(chainId: number): Promise<{
   realitioERC20: string

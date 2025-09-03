@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEther, keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem'
-import { REALITIO_ABI, ERC20_ABI, getDeployedAddresses } from '@/lib/contracts'
+import { REALITIO_ABI, ERC20_ABI, getDeployedAddresses, resolveBondTokens, getDeployments, type BondToken } from '@/lib/contracts'
+import { CHAIN_LABEL } from '@/lib/viem'
 
 export default function QuestionDetail({ params }: { params: { id: string } }) {
   const questionId = params.id as `0x${string}`
@@ -28,6 +29,8 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
     answer: '',
     nonce: '',
   })
+  
+  const [bondTokenInfo, setBondTokenInfo] = useState<BondToken | null>(null)
 
   useEffect(() => {
     loadQuestion()
@@ -49,7 +52,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
         args: [questionId],
       })
 
-      setQuestion({
+      const questionInfo = {
         id: questionId,
         arbitrator: questionData[0],
         bondToken: questionData[1],
@@ -61,7 +64,15 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
         bestAnswerer: questionData[7],
         lastAnswerTs: questionData[8],
         finalized: questionData[9],
-      })
+      }
+      
+      setQuestion(questionInfo)
+      
+      // Get bond token info
+      const deployments = await getDeployments(chainId)
+      const tokens = resolveBondTokens(chainId, deployments)
+      const token = tokens.find(t => t.address.toLowerCase() === questionInfo.bondToken?.toLowerCase())
+      setBondTokenInfo(token || null)
     } catch (err) {
       console.error('Error loading question:', err)
     } finally {
@@ -245,6 +256,18 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
               </div>
               
               <div>
+                <p className="text-sm text-gray-500">Bond Token</p>
+                <p className="font-medium">
+                  {bondTokenInfo ? `${bondTokenInfo.label} (${bondTokenInfo.symbol})` : 'Native KAIA'}
+                  {bondTokenInfo?.symbol === 'WKAIA' && (
+                    <span className="ml-2 text-xs text-gray-500">
+                      (Wrapped KAIA)
+                    </span>
+                  )}
+                </p>
+              </div>
+              
+              <div>
                 <p className="text-sm text-gray-500">Timeout</p>
                 <p>{question.timeout} seconds</p>
               </div>
@@ -256,12 +279,12 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
               
               <div>
                 <p className="text-sm text-gray-500">Current Best Bond</p>
-                <p>{question.bestBond ? formatEther(question.bestBond) : '0'} tokens</p>
+                <p>{question.bestBond ? formatEther(question.bestBond) : '0'} {bondTokenInfo?.symbol || 'KAIA'}</p>
               </div>
               
               <div>
                 <p className="text-sm text-gray-500">Minimum Next Bond</p>
-                <p>{formatEther(minBond)} tokens</p>
+                <p>{formatEther(minBond)} {bondTokenInfo?.symbol || 'KAIA'}</p>
               </div>
               
               {question.finalized && (

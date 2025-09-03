@@ -1,5 +1,7 @@
 import { createPublicClient, createWalletClient, custom, http } from 'viem'
-import { mainnet } from 'viem/chains'
+import { injected } from '@wagmi/connectors'
+import { createConfig } from '@wagmi/core'
+import { walletConnect } from '@wagmi/connectors'
 
 export const kaiaMainnet = {
   id: 8217,
@@ -38,8 +40,30 @@ export const kaiaTestnet = {
   testnet: true,
 } as const
 
+export const MAINNET_CHAIN_ID = 8217
+export const TESTNET_CHAIN_ID = 1001
+
+export const USDT_MAINNET = '0xd077a400968890eacc75cdc901f0356c943e4fdb' as const
 export const WKAIA_MAINNET = '0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432' as const
 export const WKAIA_TESTNET = '0x043c471bEe060e00A56CcD02c0Ca286808a5A436' as const
+
+export const CHAINS = {
+  8217: kaiaMainnet,
+  1001: kaiaTestnet,
+} as const
+
+export const CHAIN_LABEL = (id: number): string => {
+  switch (id) {
+    case 8217:
+      return 'Mainnet'
+    case 1001:
+      return 'Testnet'
+    default:
+      return `Chain ${id}`
+  }
+}
+
+export type Addr = `0x${string}`
 
 export function getPublicClient(chainId: number) {
   const chain = chainId === 8217 ? kaiaMainnet : kaiaTestnet
@@ -54,5 +78,41 @@ export function getWalletClient(chainId: number) {
   return createWalletClient({
     chain,
     transport: custom(window.ethereum!),
+  })
+}
+
+export function getWagmiConfig(projectId?: string) {
+  const connectors = [
+    injected({
+      target: {
+        id: 'kaiawallet',
+        name: 'KaiaWallet',
+        provider: typeof window !== 'undefined' ? window.ethereum : undefined,
+      },
+    }),
+  ]
+
+  if (projectId) {
+    connectors.push(
+      walletConnect({
+        projectId,
+        metadata: {
+          name: 'RealitioERC20',
+          description: 'Oracle system for KAIA chain',
+          url: 'https://realitio-kaia.app',
+          icons: [],
+        },
+        showQrModal: true,
+      })
+    )
+  }
+
+  return createConfig({
+    chains: [kaiaMainnet, kaiaTestnet],
+    connectors,
+    transports: {
+      [kaiaMainnet.id]: http(),
+      [kaiaTestnet.id]: http(),
+    },
   })
 }

@@ -35,7 +35,11 @@ export default function RootLayout({
                       </a>
                     </div>
                   </div>
-                  <ConnectButton />
+                  <ConnectButton 
+                    label="Connect KaiaWallet"
+                    showBalance={true}
+                    chainStatus="icon"
+                  />
                 </div>
               </div>
             </nav>
