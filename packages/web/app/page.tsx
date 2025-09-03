@@ -6,10 +6,14 @@ import { formatEther, parseEventLogs } from 'viem'
 import { REALITIO_ABI, getDeployedAddresses } from '@/lib/contracts'
 import Link from 'next/link'
 import DisclaimerBadge from '@/components/DisclaimerBadge'
+import NetworkChips from '@/components/NetworkChips'
+import StatCard from '@/components/StatCard'
+import { DataTable, Th, Td, TRow } from '@/components/DataTable'
 
 export default function Home() {
   const [questions, setQuestions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [networkFilter, setNetworkFilter] = useState<number | 'all'>('all')
   const publicClient = usePublicClient()
   const chainId = useChainId()
   const { address } = useAccount()
@@ -70,61 +74,107 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="text-center">Loading questions...</div>
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="inline-flex h-8 w-8 animate-spin rounded-full border-2 border-emerald-400 border-r-transparent" />
+            <p className="mt-4 text-white/60">Loading questions...</p>
+          </div>
         </div>
       </div>
     )
   }
 
+  // Calculate stats
+  const openQuestions = questions.filter(q => !q.finalized).length
+  const totalQuestions = questions.length
+  const totalBondValue = questions.reduce((acc, q) => acc + (q.bestBond ? Number(formatEther(q.bestBond)) : 0), 0)
+
   return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div className="px-4 py-6 sm:px-0">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold">Recent Questions</h2>
-          <DisclaimerBadge compact />
-        </div>
-        
-        {questions.length === 0 ? (
-          <div className="bg-white overflow-hidden shadow rounded-lg p-6">
-            <p className="text-gray-500 text-center">No questions yet. Be the first to create one!</p>
-            <div className="mt-4 text-center">
-              <Link href="/create" className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                Create Question
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {questions.map((q) => (
-              <div key={q.id} className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-medium text-gray-900">{q.text}</h3>
-                      <div className="mt-2 text-sm text-gray-500">
-                        <p>Timeout: {q.timeout} seconds</p>
-                        <p>Best Bond: {q.bestBond ? formatEther(q.bestBond) : '0'} tokens</p>
-                        <p>Status: {q.finalized ? 'Finalized' : 'Open'}</p>
-                        {q.finalized && <p>Result: {q.bestAnswer}</p>}
-                      </div>
-                    </div>
-                    <div>
-                      <Link 
-                        href={`/q/${q.id}`}
-                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-                      >
-                        View Details
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+    <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+      {/* Filter row */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <NetworkChips value={networkFilter} onChange={setNetworkFilter} />
+        <DisclaimerBadge compact />
       </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <StatCard title="Total Questions" value={totalQuestions.toString()} trend="up" />
+        <StatCard title="Open Questions" value={openQuestions.toString()} meta={<span>Active now</span>} />
+        <StatCard title="Total Bonds" value={`${totalBondValue.toFixed(2)}`} meta={<span>All tokens</span>} />
+      </div>
+
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-bold text-white">Recent Questions</h2>
+        <p className="mt-1 text-sm text-white/60">Browse and answer oracle questions</p>
+      </div>
+        
+      {questions.length === 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-8">
+          <p className="text-white/60 text-center">No questions yet. Be the first to create one!</p>
+          <div className="mt-4 text-center">
+            <Link 
+              href="/create" 
+              className="inline-flex items-center px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors"
+            >
+              Create Question
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <DataTable>
+          <thead>
+            <tr>
+              <Th>Question</Th>
+              <Th>Status</Th>
+              <Th>Bond Token</Th>
+              <Th align="right">Best Bond</Th>
+              <Th align="center">Timeout</Th>
+              <Th align="center">Action</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {questions.map((q) => (
+              <TRow key={q.id}>
+                <Td>
+                  <div className="max-w-xs">
+                    <p className="text-white font-medium truncate">{q.text}</p>
+                    <p className="text-xs text-white/40 mt-1">ID: {q.id.slice(0, 10)}...</p>
+                  </div>
+                </Td>
+                <Td>
+                  <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                    q.finalized 
+                      ? 'bg-white/10 text-white/60' 
+                      : 'bg-emerald-400/10 text-emerald-400 border border-emerald-400/30'
+                  }`}>
+                    {q.finalized ? 'Finalized' : 'Open'}
+                  </span>
+                </Td>
+                <Td>
+                  <span className="text-white/80">{q.bondToken === '0x0000000000000000000000000000000000000000' ? 'Native' : 'ERC20'}</span>
+                </Td>
+                <Td align="right" className="font-mono text-white/80">
+                  {q.bestBond ? formatEther(q.bestBond) : '0'}
+                </Td>
+                <Td align="center" className="text-white/60">
+                  {q.timeout}s
+                </Td>
+                <Td align="center">
+                  <Link 
+                    href={`/q/${q.id}`}
+                    className="inline-flex items-center px-3 py-1 rounded-lg border border-white/10 hover:bg-white/5 text-white/80 text-xs font-medium transition-colors"
+                  >
+                    View
+                  </Link>
+                </Td>
+              </TRow>
+            ))}
+          </tbody>
+        </DataTable>
+      )}
     </div>
   )
 }

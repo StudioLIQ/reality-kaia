@@ -1,3 +1,66 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    @apply bg-neutral-950 text-white;
+  }
+  
+  body {
+    @apply bg-neutral-950 text-white antialiased;
+  }
+  
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+  
+  /* Focus rings */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-emerald-400/50 ring-offset-2 ring-offset-neutral-950;
+  }
+  
+  /* Input styles */
+  input[type="text"],
+  input[type="number"],
+  input[type="datetime-local"],
+  textarea,
+  select {
+    @apply bg-white/5 border-white/10 text-white placeholder-white/40;
+  }
+  
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  input[type="datetime-local"]:focus,
+  textarea:focus,
+  select:focus {
+    @apply border-emerald-400/50 bg-white/10;
+  }
+}
+
+@layer components {
+  .surface-card {
+    @apply rounded-2xl border border-white/10 bg-white/5;
+  }
+  
+  .btn-primary {
+    @apply border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300;
+  }
+  
+  .btn-secondary {
+    @apply border-white/15 hover:bg-white/5 text-white;
+  }
+}

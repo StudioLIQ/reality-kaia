@@ -217,211 +217,221 @@ export default function CreateQuestion() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div className="px-4 py-6 sm:px-0">
-        {gated && (
-          <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
-            Please connect KaiaWallet to the correct network (Mainnet {KAIA_MAINNET_ID} or Kairos {KAIA_TESTNET_ID}).
-          </div>
-        )}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h2 className="text-2xl font-bold mb-6">Create New Question</h2>
-            
-            <form onSubmit={handleSubmit} className={`space-y-6 ${gated ? 'pointer-events-none opacity-50' : ''}`}>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Bond Token
-                </label>
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      {/* Page header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-white">Create New Question</h1>
+        <p className="mt-2 text-sm text-white/60">Submit a question to the oracle network</p>
+      </div>
+
+      {gated && (
+        <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
+          Please connect KaiaWallet to the correct network (Mainnet {KAIA_MAINNET_ID} or Kairos {KAIA_TESTNET_ID}).
+        </div>
+      )}
+
+      {/* Form card */}
+      <div className="rounded-2xl border border-white/10 bg-neutral-950 p-6">
+        <form onSubmit={handleSubmit} className={`space-y-6 ${gated ? 'pointer-events-none opacity-50' : ''}`}>
+          {/* Bond Token Section */}
+          <section className="space-y-2">
+            <label className="block text-sm font-medium text-white/80">
+              Bond Token
+            </label>
                 <TokenSelector 
                   tokens={availableTokens} 
                   value={bondToken} 
                   onChange={setBondToken} 
                 />
-                {bondToken && !bondToken.active && (
-                  <p className="text-xs text-red-600 mt-1">Selected token is not allowed. Choose an Active token.</p>
-                )}
-                {bondToken && feeInfo && (
-                  <p className="mt-2 text-sm text-gray-500">
-                    Fee: {(feeInfo.feeBps / 100).toFixed(2)}% (paid to {feeInfo.feeRecipient.slice(0, 6)}...{feeInfo.feeRecipient.slice(-4)})
-                  </p>
-                )}
-                {bondToken && allowance === BigInt(0) && (
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={loading || checkingAllowance || !bondToken.active}
-                    className="mt-2 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {checkingAllowance ? 'Checking...' : 'Approve Token'}
-                  </button>
-                )}
-              </div>
+            {bondToken && !bondToken.active && (
+              <p className="text-xs text-red-400 mt-1">Selected token is not allowed. Choose an Active token.</p>
+            )}
+            {bondToken && feeInfo && (
+              <p className="mt-2 text-sm text-white/50">
+                Fee: {(feeInfo.feeBps / 100).toFixed(2)}% (paid to {feeInfo.feeRecipient.slice(0, 6)}...{feeInfo.feeRecipient.slice(-4)})
+              </p>
+            )}
+            {bondToken && allowance === BigInt(0) && (
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={loading || checkingAllowance || !bondToken.active}
+                className="mt-2 inline-flex items-center px-3 py-1.5 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {checkingAllowance ? 'Checking...' : 'Approve Token'}
+              </button>
+            )}
+          </section>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Template
-                </label>
+          {/* Template Section */}
+          <section>
+            <label className="block text-sm font-medium text-white/80 mb-3">
+              Template
+            </label>
                 <TemplatePicker 
                   items={templates} 
                   value={templateId} 
                   onChange={setTemplateId} 
                 />
-                {!templateId && (
-                  <p className="mt-2 text-sm text-amber-600">Please select a template to continue.</p>
-                )}
-                <p className="mt-3 text-xs text-gray-500">
-                  Only the templates listed above are supported. Need another template? Please contact an admin.
-                </p>
-              </div>
+            {!templateId && (
+              <p className="mt-2 text-sm text-amber-400">Please select a template to continue.</p>
+            )}
+            <p className="mt-3 text-xs text-white/50">
+              Only the templates listed above are supported. Need another template? Please contact an admin.
+            </p>
+          </section>
 
-              <div>
-                <label htmlFor="question" className="block text-sm font-medium text-gray-700">
-                  Question
-                </label>
-                <textarea
-                  id="question"
-                  value={formData.question}
-                  onChange={(e) => setFormData({ ...formData, question: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="Will ETH price be above $3000 on 2025-01-01?"
-                  required
-                />
-              </div>
+          {/* Question Section */}
+          <section>
+            <label htmlFor="question" className="block text-sm font-medium text-white/80">
+              Question
+            </label>
+            <textarea
+              id="question"
+              value={formData.question}
+              onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+              rows={3}
+              className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:border-emerald-400/50 focus:bg-white/10 focus:outline-none"
+              placeholder="Will ETH price be above $3000 on 2025-01-01?"
+              required
+            />
+          </section>
 
-              <div>
-                <label htmlFor="arbitrator" className="block text-sm font-medium text-gray-700">
-                  Arbitrator Address (optional)
-                </label>
+          {/* Arbitrator Section */}
+          <section>
+            <label htmlFor="arbitrator" className="block text-sm font-medium text-white/80">
+              Arbitrator Address (optional)
+            </label>
+            <input
+              type="text"
+              id="arbitrator"
+              value={formData.arbitrator}
+              onChange={(e) => setFormData({ ...formData, arbitrator: e.target.value })}
+              className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:border-emerald-400/50 focus:bg-white/10 focus:outline-none"
+              placeholder="Leave empty to use default arbitrator"
+            />
+          </section>
+
+          {/* Bond Amount Section */}
+          <section>
+            <label htmlFor="bondAmount" className="block text-sm font-medium text-white/80">
+              Initial Bond Amount
+            </label>
+            <div className="mt-1 relative">
+              <input
+                type="text"
+                id="bondAmount"
+                value={bondAmount}
+                onChange={(e) => setBondAmount(e.target.value)}
+                className="block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:border-emerald-400/50 focus:bg-white/10 focus:outline-none pr-16"
+                placeholder="100"
+              />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                <span className="text-white/50 sm:text-sm">{bondToken?.symbol || 'tokens'}</span>
+              </div>
+            </div>
+            {feeQuote && bondToken && feeInfo && (
+              <FeeNotice
+                feeFormatted={feeQuote.feeFormatted}
+                totalFormatted={feeQuote.totalFormatted}
+                symbol={bondToken.symbol}
+                feeBps={feeInfo.feeBps}
+                feeRecipient={feeInfo.feeRecipient as `0x${string}`}
+              />
+            )}
+          </section>
+
+          {/* Timeout Section */}
+          <section>
+            <label className="block text-sm font-medium text-white/80 mb-2">
+              Timeout
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {TIMEOUT_PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  type="button"
+                  className={`px-3 py-1.5 rounded-full border transition-colors text-sm ${timeoutSec === p.seconds ? 'border-emerald-400 bg-emerald-400/10 text-emerald-300' : 'border-white/10 text-white/70 hover:border-white/20'}`}
+                  onClick={() => { setTimeoutSec(p.seconds); setTimeoutInput(p.seconds/3600); setTimeoutUnit('h'); }}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <span className={`px-3 py-1.5 text-xs rounded-full ${TIMEOUT_PRESETS.some(p => p.seconds === timeoutSec) ? 'opacity-40' : 'bg-white/10'} text-white/50`}>Custom</span>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                value={timeoutInput}
+                onChange={e => setTimeoutInput(Number(e.target.value || 1))}
+                className="w-28 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+              />
+              <select
+                value={timeoutUnit}
+                onChange={e => setTimeoutUnit(e.target.value as any)}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+              >
+                <option value="s">Seconds</option>
+                <option value="m">Minutes</option>
+                <option value="h">Hours</option>
+                <option value="d">Days</option>
+              </select>
+              <span className="text-xs text-white/50">= {timeoutSec.toLocaleString()} sec</span>
+            </div>
+          </section>
+
+          {/* Opening Timestamp Section */}
+          <section>
+            <label className="block text-sm font-medium text-white/80 mb-2">
+              Opening Timestamp
+            </label>
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center gap-2 text-sm text-white/70">
                 <input
-                  type="text"
-                  id="arbitrator"
-                  value={formData.arbitrator}
-                  onChange={(e) => setFormData({ ...formData, arbitrator: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="Leave empty to use default arbitrator"
+                  type="checkbox"
+                  checked={useNow}
+                  onChange={e => {
+                    const v = e.target.checked;
+                    setUseNow(v);
+                    if (v) setOpeningTs(Math.floor(Date.now()/1000));
+                  }}
+                  className="rounded border-white/20 bg-white/5 text-emerald-400 focus:ring-emerald-400/50"
                 />
-              </div>
-
-              <div>
-                <label htmlFor="bondAmount" className="block text-sm font-medium text-gray-700">
-                  Initial Bond Amount
-                </label>
-                <div className="mt-1 relative">
-                  <input
-                    type="text"
-                    id="bondAmount"
-                    value={bondAmount}
-                    onChange={(e) => setBondAmount(e.target.value)}
-                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm pr-16"
-                    placeholder="100"
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">{bondToken?.symbol || 'tokens'}</span>
-                  </div>
-                </div>
-                {feeQuote && bondToken && feeInfo && (
-                  <FeeNotice
-                    feeFormatted={feeQuote.feeFormatted}
-                    totalFormatted={feeQuote.totalFormatted}
-                    symbol={bondToken.symbol}
-                    feeBps={feeInfo.feeBps}
-                    feeRecipient={feeInfo.feeRecipient as `0x${string}`}
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Timeout
-                </label>
-                <div className="flex gap-2">
-                  {TIMEOUT_PRESETS.map(p => (
-                    <button
-                      key={p.label}
-                      type="button"
-                      className={`px-3 py-1 rounded-full border ${timeoutSec === p.seconds ? 'border-indigo-400 bg-indigo-400/10' : 'border-gray-300'}`}
-                      onClick={() => { setTimeoutSec(p.seconds); setTimeoutInput(p.seconds/3600); setTimeoutUnit('h'); }}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                  <span className={`px-2 text-xs rounded ${TIMEOUT_PRESETS.some(p => p.seconds === timeoutSec) ? 'opacity-40' : 'bg-gray-100'}`}>Custom</span>
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    value={timeoutInput}
-                    onChange={e => setTimeoutInput(Number(e.target.value || 1))}
-                    className="w-28 bg-transparent border border-gray-300 rounded px-3 py-2"
-                  />
-                  <select
-                    value={timeoutUnit}
-                    onChange={e => setTimeoutUnit(e.target.value as any)}
-                    className="bg-transparent border border-gray-300 rounded px-2 py-2"
-                  >
-                    <option value="s">Seconds</option>
-                    <option value="m">Minutes</option>
-                    <option value="h">Hours</option>
-                    <option value="d">Days</option>
-                  </select>
-                  <span className="text-xs text-gray-500">= {timeoutSec.toLocaleString()} sec</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Opening Timestamp
-                </label>
-                <div className="flex items-center gap-3">
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={useNow}
-                      onChange={e => {
-                        const v = e.target.checked;
-                        setUseNow(v);
-                        if (v) setOpeningTs(Math.floor(Date.now()/1000));
-                      }}
-                    />
-                    Now
-                  </label>
-                  {!useNow && (
-                    <input
-                      type="datetime-local"
-                      defaultValue={toLocalInput(openingTs)}
-                      onChange={(e) => setOpeningTs(toUnix(e.target.value))}
-                      className="bg-transparent border border-gray-300 rounded px-3 py-2"
-                    />
-                  )}
-                  <span className="text-xs text-gray-500">unix: {openingTs}</span>
-                </div>
-              </div>
-
-
-              {error && (
-                <div className="rounded-md bg-red-50 p-4">
-                  <p className="text-sm text-red-800">{error}</p>
-                </div>
+                Now
+              </label>
+              {!useNow && (
+                <input
+                  type="datetime-local"
+                  defaultValue={toLocalInput(openingTs)}
+                  onChange={(e) => setOpeningTs(toUnix(e.target.value))}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+                />
               )}
+              <span className="text-xs text-white/50">unix: {openingTs}</span>
+            </div>
+          </section>
 
-              <DisclaimerGate>
-                <div className="flex items-center justify-between gap-3">
-                  <DisclaimerBadge compact />
-                  <button
-                    type="submit"
-                    disabled={loading || !address || !bondToken || !templateId || allowance === BigInt(0) || gated || (bondToken && !bondToken.active)}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? 'Creating...' : 'Create Question'}
-                  </button>
-                </div>
-              </DisclaimerGate>
-            </form>
-          </div>
-        </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-400/30 bg-red-400/10 p-4">
+              <p className="text-sm text-red-300">{error}</p>
+            </div>
+          )}
+
+          <DisclaimerGate>
+            <div className="flex items-center justify-between gap-3">
+              <DisclaimerBadge compact />
+              <button
+                type="submit"
+                disabled={loading || !address || !bondToken || !templateId || allowance === BigInt(0) || gated || (bondToken && !bondToken.active)}
+                className="inline-flex items-center px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Creating...' : 'Create Question'}
+              </button>
+            </div>
+          </DisclaimerGate>
+        </form>
       </div>
     </div>
   )
