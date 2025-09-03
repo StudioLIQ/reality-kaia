@@ -5,7 +5,6 @@ import { useAccount, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEventLogs } from 'viem'
 import { REALITIO_ABI, getDeployedAddresses } from '@/lib/contracts'
 import Link from 'next/link'
-import DisclaimerBadge from '@/components/DisclaimerBadge'
 import NetworkChips from '@/components/NetworkChips'
 import StatCard from '@/components/StatCard'
 import { DataTable, Th, Td, TRow } from '@/components/DataTable'
@@ -95,7 +94,6 @@ export default function Home() {
       {/* Filter row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <NetworkChips value={networkFilter} onChange={setNetworkFilter} />
-        <DisclaimerBadge compact />
       </div>
 
       {/* Stat cards */}

@@ -1,173 +1,76 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
-import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import { useMemo } from "react";
+import { useAccount, useChainId, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { chainLabel, KAIA_MAINNET_ID, KAIA_TESTNET_ID, networkStatus } from "@/lib/chain";
 
-const short = (a?: `0x${string}`) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
+export type NetStatus = "NOT_CONNECTED" | "WRONG_NETWORK" | "MAINNET" | "TESTNET";
+const KAIA_MAINNET_ID = 8217;
+const KAIA_TESTNET_ID = 1001;
+const short = (a?: `0x${string}`) => (a ? `${a.slice(0,6)}…${a.slice(-4)}` : "");
+
+const statusOf = (connected: boolean, id?: number): NetStatus => {
+  if (!connected) return "NOT_CONNECTED";
+  if (id === KAIA_MAINNET_ID) return "MAINNET";
+  if (id === KAIA_TESTNET_ID) return "TESTNET";
+  return "WRONG_NETWORK";
+};
+
+// tiny inline icons
+const Dot = ({ cls }: { cls: string }) => <span className={`inline-block h-2 w-2 rounded-full ${cls}`} aria-hidden="true" />;
+const Plug = () => (<svg width="14" height="14" viewBox="0 0 24 24" className="opacity-90"><path fill="currentColor" d="M7 7h10v3a5 5 0 0 1-5 5H7V7Zm2-5h6v4H9V2Zm-5 6h4v10H6a2 2 0 0 1-2-2V8Z"/></svg>);
+const Alert = () => (<svg width="14" height="14" viewBox="0 0 24 24" className="opacity-90"><path fill="currentColor" d="M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z"/></svg>);
 
 export default function WalletNetworkButton() {
   const chainId = useChainId();
   const { address, isConnected } = useAccount();
-  const { connect, connectors, isPending: isConnPending } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { switchChain, isPending: isSwitching } = useSwitchChain();
+  const { connect, connectors, isPending: isConnecting } = useConnect();
+  const { disconnect, isPending: isDisconnecting } = useDisconnect();
 
-  const kaia = connectors.find(c => c.id === "injected" && c.name === "KaiaWallet") ?? 
-                connectors.find(c => c.name === "KaiaWallet") ??
-                connectors[0]; // Fallback to first connector
-  
-  const status = networkStatus(isConnected, chainId);
-  const [open, setOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const status = statusOf(isConnected, chainId);
+  const kaia = useMemo(() => {
+    return connectors.find(c => c.id === "injected" && c.name === "KaiaWallet") ?? 
+           connectors.find(c => c.name === "KaiaWallet") ?? 
+           connectors.find(c => c.type === "injected");
+  }, [connectors]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [open]);
-
-  const onConnect = () => {
-    if (!kaia) {
-      window.alert("KaiaWallet not detected. Please install the extension and refresh.");
-      return;
-    }
-    connect({ connector: kaia });
-  };
-
-  const switchTo = (id: number) => {
-    if (switchChain) {
-      switchChain({ chainId: id });
-    }
-    setOpen(false);
-  };
-
-  // Button styling
-  const base = "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all";
-  const pill = (cls: string) => `${base} ${cls}`;
-  const dot = (cls: string) => <span className={`h-2 w-2 rounded-full ${cls}`} />;
-
-  const ButtonView = () => {
+  const onClick = () => {
     if (status === "NOT_CONNECTED") {
-      return (
-        <button 
-          onClick={onConnect} 
-          disabled={isConnPending}
-          className={pill("border-emerald-400/40 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300")}
-        >
-          {dot("bg-emerald-400")} 
-          {isConnPending ? "Connecting..." : "Connect KaiaWallet"}
-        </button>
-      );
+      if (!kaia) return alert("KaiaWallet not detected. Please install the extension and refresh.");
+      connect({ connector: kaia });
+    } else {
+      disconnect();
     }
-    
-    if (status === "WRONG_NETWORK") {
-      return (
-        <div className="relative" ref={dropdownRef}>
-          <button 
-            onClick={() => setOpen(v => !v)} 
-            className={pill("border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300")}
-          >
-            {dot("bg-amber-400")} Wrong Network
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {open && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl border border-white/10 bg-black/95 backdrop-blur-sm p-2 z-50 shadow-xl">
-              <button 
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm transition-colors"
-                onClick={() => switchTo(KAIA_MAINNET_ID)} 
-                disabled={isSwitching}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-sky-400" />
-                  Switch to Kaia Mainnet (8217)
-                </div>
-              </button>
-              <button 
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm transition-colors"
-                onClick={() => switchTo(KAIA_TESTNET_ID)} 
-                disabled={isSwitching}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  Switch to Kairos Testnet (1001)
-                </div>
-              </button>
-              <div className="mt-2 border-t border-white/10" />
-              <button 
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm text-red-400 transition-colors"
-                onClick={() => { setOpen(false); disconnect(); }}
-              >
-                Disconnect
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    }
-    
-    // Connected on allowed network
-    const color = status === "MAINNET" ? "bg-sky-400" : "bg-emerald-400";
-    const badge = status === "MAINNET" ? "Mainnet" : "Testnet";
-    
-    return (
-      <div className="relative" ref={dropdownRef}>
-        <button 
-          onClick={() => setOpen(v => !v)} 
-          className={pill("border-white/10 hover:bg-white/5 text-white")}
-        >
-          {dot(color)} Kaia {badge} · {short(address)}
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {open && (
-          <div className="absolute right-0 mt-2 w-64 rounded-xl border border-white/10 bg-black/95 backdrop-blur-sm p-2 z-50 shadow-xl">
-            <div className="px-3 py-2 text-xs opacity-70">Connected: {chainLabel(chainId)}</div>
-            <button 
-              className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm transition-colors disabled:opacity-50"
-              onClick={() => switchTo(KAIA_MAINNET_ID)} 
-              disabled={isSwitching || chainId === KAIA_MAINNET_ID}
-            >
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-sky-400" />
-                Switch to Kaia Mainnet (8217)
-                {chainId === KAIA_MAINNET_ID && <span className="ml-auto text-xs opacity-50">Current</span>}
-              </div>
-            </button>
-            <button 
-              className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm transition-colors disabled:opacity-50"
-              onClick={() => switchTo(KAIA_TESTNET_ID)} 
-              disabled={isSwitching || chainId === KAIA_TESTNET_ID}
-            >
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                Switch to Kairos Testnet (1001)
-                {chainId === KAIA_TESTNET_ID && <span className="ml-auto text-xs opacity-50">Current</span>}
-              </div>
-            </button>
-            <div className="mt-2 border-t border-white/10" />
-            <button 
-              className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm text-red-400 transition-colors"
-              onClick={() => { setOpen(false); disconnect(); }}
-            >
-              Disconnect
-            </button>
-          </div>
-        )}
-      </div>
-    );
   };
 
-  return <ButtonView />;
+  const label =
+    status === "NOT_CONNECTED" ? "Not Connected" :
+    status === "WRONG_NETWORK" ? "Wrong Network" :
+    status === "MAINNET" ? "Mainnet" : "Testnet";
+
+  const icon =
+    status === "NOT_CONNECTED" ? <Plug /> :
+    status === "WRONG_NETWORK" ? <Alert /> :
+    status === "MAINNET" ? <Dot cls="bg-sky-400" /> : <Dot cls="bg-emerald-400" />;
+
+  const suffix = isConnected ? ` · ${short(address)}` : "";
+  const busy = isConnecting || isDisconnecting;
+
+  const base = "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-400/40";
+  const theme =
+    status === "NOT_CONNECTED" ? "border-emerald-400/40 bg-emerald-400/10 hover:bg-emerald-400/20" :
+    status === "WRONG_NETWORK" ? "border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20" :
+    "border-white/10 hover:bg-white/5";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      aria-label={status === "NOT_CONNECTED" ? "Connect KaiaWallet" : "Disconnect wallet"}
+      className={`${base} ${theme} ${busy ? "opacity-60" : ""}`}
+    >
+      <span className="text-xs opacity-80">{icon}</span>
+      <span>{label}{suffix}</span>
+    </button>
+  );
 }

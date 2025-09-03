@@ -4,6 +4,7 @@ import './globals.css'
 import { WalletProvider } from '@/components/WalletProvider'
 import { DisclaimerProvider } from '@/context/DisclaimerContext'
 import AppHeader from '@/components/AppHeader'
+import HeaderDisclaimerBar from '@/components/HeaderDisclaimerBar'
 import DisclaimerModal from '@/components/DisclaimerModal'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -25,6 +26,7 @@ export default function RootLayout({
           <WalletProvider>
             <div className="min-h-screen bg-neutral-950">
               <AppHeader />
+              <HeaderDisclaimerBar />
               <main className="relative">
                 {children}
               </main>

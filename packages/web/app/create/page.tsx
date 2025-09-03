@@ -20,7 +20,6 @@ import { quoteFee } from '@/lib/fees'
 import FeeNotice from '@/components/FeeNotice'
 import TemplatePicker from '@/components/TemplatePicker'
 import TokenSelector from '@/components/TokenSelector'
-import DisclaimerBadge from '@/components/DisclaimerBadge'
 import DisclaimerGate from '@/components/DisclaimerGate'
 import { getAllowedTemplates } from '@/lib/templates'
 import { useRouter } from 'next/navigation'
@@ -217,15 +216,18 @@ export default function CreateQuestion() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className="mx-auto max-w-6xl px-4 space-y-6">
+      {/* sticky disclaimer bar (below header height ~56px) */}
+
+      
       {/* Page header */}
-      <div className="mb-8">
+      <div>
         <h1 className="text-3xl font-bold text-white">Create New Question</h1>
         <p className="mt-2 text-sm text-white/60">Submit a question to the oracle network</p>
-      </div>
+        </div>
 
       {gated && (
-        <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
+          <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
           Please connect KaiaWallet to the correct network (Mainnet {KAIA_MAINNET_ID} or Kairos {KAIA_TESTNET_ID}).
         </div>
       )}
@@ -412,25 +414,11 @@ export default function CreateQuestion() {
             </div>
           </section>
 
-
           {error && (
             <div className="rounded-lg border border-red-400/30 bg-red-400/10 p-4">
               <p className="text-sm text-red-300">{error}</p>
             </div>
           )}
-
-          <DisclaimerGate>
-            <div className="flex items-center justify-between gap-3">
-              <DisclaimerBadge compact />
-              <button
-                type="submit"
-                disabled={loading || !address || !bondToken || !templateId || allowance === BigInt(0) || gated || (bondToken && !bondToken.active)}
-                className="inline-flex items-center px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Creating...' : 'Create Question'}
-              </button>
-            </div>
-          </DisclaimerGate>
         </form>
       </div>
     </div>
