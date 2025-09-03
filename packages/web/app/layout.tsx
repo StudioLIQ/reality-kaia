@@ -11,24 +11,24 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: {
-    default: "Orakore",
+    default: "Orakore - Optimistic oracle for KAIA network",
     template: "%s · Orakore",
   },
   description:
-    "Orakore — a personal, unaudited Reality.eth-driven oracle on Kaia. Provided AS IS. Use at your own risk.",
+    "Orakore — a Optimistic oracle for KAIA network. Personal, unaudited. Provided AS IS. Use at your own risk.",
   applicationName: "Orakore",
   keywords: ["Orakore", "Kaia", "Reality.eth", "oracle", "prediction", "dapp"],
   openGraph: {
-    title: "Orakore",
+    title: "Orakore - Optimistic oracle for KAIA network",
     description:
-      "Orakore — a personal, unaudited Reality.eth-driven oracle on Kaia. Provided AS IS.",
+      "Orakore — a Optimistic oracle for KAIA network. Personal, unaudited. Provided AS IS. Use at your own risk.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Orakore",
+    title: "Orakore - Optimistic oracle for KAIA network",
     description:
-      "Orakore — a personal, unaudited Reality.eth-driven oracle on Kaia.",
+      "Orakore — a Optimistic oracle for KAIA network. Personal, unaudited. Provided AS IS. Use at your own risk.",
   },
   icons: {
     icon: [
