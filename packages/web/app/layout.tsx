@@ -6,6 +6,7 @@ import { DisclaimerProvider } from '@/context/DisclaimerContext'
 import AppHeader from '@/components/AppHeader'
 import HeaderDisclaimerBar from '@/components/HeaderDisclaimerBar'
 import DisclaimerModal from '@/components/DisclaimerModal'
+import NetworkWatcher from '@/components/NetworkWatcher'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -47,6 +48,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <DisclaimerProvider>
           <WalletProvider>
+            <NetworkWatcher />
             <div className="min-h-screen bg-neutral-950">
               <AppHeader />
               <HeaderDisclaimerBar />

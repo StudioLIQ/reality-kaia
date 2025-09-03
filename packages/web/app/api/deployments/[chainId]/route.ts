@@ -4,10 +4,10 @@ import path from 'path'
 
 export async function GET(
   request: Request,
-  { params }: { params: { chainId: string } }
+  { params }: { params: Promise<{ chainId: string }> }
 ) {
   try {
-    const chainId = params.chainId
+    const { chainId } = await params
     const deploymentsPath = path.join(process.cwd(), '..', '..', 'deployments', `${chainId}.json`)
     
     if (!fs.existsSync(deploymentsPath)) {

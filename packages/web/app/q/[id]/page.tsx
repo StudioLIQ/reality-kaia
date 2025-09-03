@@ -15,8 +15,8 @@ import DisclaimerBadge from '@/components/DisclaimerBadge'
 import DisclaimerGate from '@/components/DisclaimerGate'
 import { TEMPLATES } from '@/lib/templates'
 
-export default function QuestionDetail({ params }: { params: { id: string } }) {
-  const questionId = params.id as `0x${string}`
+export default function QuestionDetail({ params }: { params: Promise<{ id: string }> }) {
+  const [questionId, setQuestionId] = useState<`0x${string}` | null>(null)
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
@@ -48,14 +48,24 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
   const [deployments, setDeployments] = useState<any>(null)
   const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
 
+  // Handle async params
   useEffect(() => {
+    async function getParams() {
+      const { id } = await params
+      setQuestionId(id as `0x${string}`)
+    }
+    getParams()
+  }, [params])
+
+  useEffect(() => {
+    if (!questionId) return
     loadQuestion()
     const interval = setInterval(loadQuestion, 10000) // Refresh every 10 seconds
     return () => clearInterval(interval)
   }, [questionId, publicClient, chainId])
 
   async function loadQuestion() {
-    if (!publicClient) return
+    if (!publicClient || !questionId) return
     
     try {
       const addresses = await getDeployedAddresses(chainId)
@@ -147,7 +157,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
   }, [answerForm.bond, bondTokenInfo, publicClient, deployments, feeInfo])
 
   const handleSubmitAnswer = async () => {
-    if (!walletClient || !address || !publicClient) return
+    if (!walletClient || !address || !publicClient || !questionId) return
     
     setActionLoading(true)
     setError('')
@@ -270,7 +280,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
   }
 
   const handleReveal = async () => {
-    if (!walletClient || !address) return
+    if (!walletClient || !address || !questionId) return
     
     setActionLoading(true)
     setError('')
@@ -300,7 +310,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
   }
 
   const handleFinalize = async () => {
-    if (!walletClient || !address) return
+    if (!walletClient || !address || !questionId) return
     
     setActionLoading(true)
     setError('')

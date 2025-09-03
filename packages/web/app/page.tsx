@@ -14,13 +14,19 @@ export default function Home() {
   const [questions, setQuestions] = useState<QuestionRow[]>([])
   const [filteredQuestions, setFilteredQuestions] = useState<QuestionRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
   const publicClient = usePublicClient()
   const chainId = useChainId()
   const { address } = useAccount()
+  
+  // Handle client-side mounting
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     async function loadQuestions() {
-      if (!publicClient) return
+      if (!publicClient || !mounted) return
       
       const addresses = await getDeployedAddresses(chainId)
       if (!addresses) {
@@ -104,7 +110,7 @@ export default function Home() {
     }
 
     loadQuestions()
-  }, [publicClient, chainId])
+  }, [publicClient, chainId, mounted])
 
   // Calculate stats based on filtered questions
   const stats = useMemo(() => {
@@ -119,7 +125,7 @@ export default function Home() {
     return { openQuestions, totalQuestions, totalBondValue }
   }, [filteredQuestions])
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8">
         <div className="flex items-center justify-center min-h-[400px]">

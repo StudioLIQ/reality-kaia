@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from 'next/link';
 import WalletNetworkButton from '@/components/WalletNetworkButton';
 import NavLink from '@/components/NavLink';
+import FaucetButton from '@/components/FaucetButton';
 
 export default function AppHeader() {
   return (
@@ -36,8 +37,9 @@ export default function AppHeader() {
           </a>
         </nav>
 
-        {/* right: single status button only */}
-        <div className="ml-auto">
+        {/* right: faucet (testnet) + status button */}
+        <div className="ml-auto flex items-center gap-2">
+          <FaucetButton />
           <WalletNetworkButton />
         </div>
       </div>
