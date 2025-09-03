@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { WalletProvider } from '@/components/WalletProvider'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -35,11 +34,6 @@ export default function RootLayout({
                       </a>
                     </div>
                   </div>
-                  <ConnectButton 
-                    label="Connect KaiaWallet"
-                    showBalance={true}
-                    chainStatus="icon"
-                  />
                 </div>
               </div>
             </nav>

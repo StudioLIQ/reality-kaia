@@ -8,3 +8,5 @@ cache_forge/
 broadcast/
 *.log
 .DS_Store
+.idea/
+deployment/

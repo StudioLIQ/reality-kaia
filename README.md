@@ -1,6 +1,28 @@
+## Make KAIA Great Again
+
+<img src="https://cdn.kaiascan.io/nft/mainnet/0x37dafcbc7237c2e063e19439c3775c2e8cda3a80/404/1756888463299_404.avif">
+<a href="https://www.kaiascan.io/account/0x7abedc832254daa2032505e33a8dd325841d6f2d">inchyangv.kaia</a>
+
+<br>
+
+---
+
 # RealitioERC20 - Reality.eth Compatible Oracle for KAIA
 
 A minimalist implementation of Reality.eth oracle system with ERC20 token bonds and a web dashboard for KAIA blockchain.
+
+
+
+## Disclaimer
+
+This software and the associated smart contracts/web application (the “Service”) are provided as a **personal project** and **have not undergone any third-party security audit**. The Service is provided **“AS IS”** and **“AS AVAILABLE.”**
+
+The developer **assumes no liability** for any losses arising from the use, distribution, forking, or integration of the Service, including, without limitation, **loss of digital assets, price volatility, data corruption, service interruption, or regulatory compliance issues**. All risks related to **smart-contract vulnerabilities, economic attacks, and failures of networks/oracles/wallets/frontends** are borne by the user.
+
+Nothing herein constitutes **investment, legal, or tax advice**. Users are solely responsible for complying with applicable laws and regulations in their jurisdiction. By using the Service, you **agree** to these terms.
+
+> ⚠️ Not audited · Personal project · Provided AS IS · Use at your own risk.
+
 
 ## Features
 
@@ -27,6 +49,7 @@ A minimalist implementation of Reality.eth oracle system with ERC20 token bonds 
   - WKAIA: 0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432
 - **Kairos Testnet**: Chain ID 1001
   - WKAIA: 0x043c471bEe060e00A56CcD02c0Ca286808a5A436
+  - RPC: https://public-en-kairos.node.kaia.io
 
 ## Installation
 
@@ -94,7 +117,25 @@ pnpm start
 
 ## Deployment
 
-### Deploy Contracts
+### Quick Deployment
+
+```bash
+# 1) Configure environment
+cp .env.example .env
+# Edit .env with your values:
+# - PRIVATE_KEY, KAIA_MAINNET_RPC, KAIA_TESTNET_RPC (required)
+# - FEE_RECIPIENT, FEE_BPS (optional: defaults to 0x7abE... / 25)
+
+# 2) Deploy to testnet
+bash scripts/deploy.sh testnet
+
+# 3) Deploy to mainnet  
+bash scripts/deploy.sh mainnet
+
+# Frontend automatically syncs deployment addresses
+```
+
+### Manual Deployment
 
 ```bash
 cd packages/protocol

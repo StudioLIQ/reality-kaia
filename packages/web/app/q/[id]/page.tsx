@@ -2,10 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
-import { formatEther, parseEther, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
-import { REALITIO_ABI, ERC20_ABI, getDeployedAddresses, resolveBondTokens, getDeployments, type BondToken } from '@/lib/contracts'
+import { formatEther, parseEther, parseUnits, formatUnits, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
+import { REALITIO_ABI, ERC20_ABI, getDeployedAddresses, resolveBondTokens, type BondToken } from '@/lib/contracts'
+import { getDeployments } from '@/lib/deployments.generated'
 import { CHAIN_LABEL } from '@/lib/viem'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
+import { PaymentModeSelector, type PaymentMode } from '@/components/PaymentModeSelector'
+import { usePermit2, usePermit2612 } from '@/hooks/usePermit2'
+import { quoteFee } from '@/lib/fees'
+import FeeNotice from '@/components/FeeNotice'
 
 export default function QuestionDetail({ params }: { params: { id: string } }) {
   const questionId = params.id as `0x${string}`
@@ -36,6 +41,9 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
   
   const [bondTokenInfo, setBondTokenInfo] = useState<BondToken | null>(null)
   const [feeInfo, setFeeInfo] = useState<{ feeBps: number; feeRecipient: string } | null>(null)
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('permit2')
+  const [deployments, setDeployments] = useState<any>(null)
+  const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
 
   useEffect(() => {
     loadQuestion()
@@ -74,16 +82,17 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
       setQuestion(questionInfo)
       
       // Get bond token info and fee info
-      const deployments = await getDeployments(chainId)
-      const tokens = resolveBondTokens(chainId, deployments)
+      const deps = await getDeployments(chainId)
+      setDeployments(deps)
+      const tokens = resolveBondTokens(chainId, deps)
       const token = tokens.find(t => t.address.toLowerCase() === questionInfo.bondToken?.toLowerCase())
       setBondTokenInfo(token || null)
       
       // Load fee info
-      if (deployments?.feeBps && deployments?.feeRecipient) {
+      if (deps?.feeBps && deps?.feeRecipient) {
         setFeeInfo({
-          feeBps: deployments.feeBps,
-          feeRecipient: deployments.feeRecipient
+          feeBps: deps.feeBps,
+          feeRecipient: deps.feeRecipient
         })
       }
     } catch (err) {
@@ -92,6 +101,47 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
       setLoading(false)
     }
   }
+
+  // Initialize Permit2 hooks
+  const { signPermit2 } = usePermit2({
+    bondToken: question?.bondToken as `0x${string}`,
+    realitioAddress: deployments?.realitioERC20 as `0x${string}`,
+    permit2Address: deployments?.PERMIT2 as `0x${string}`,
+    chainId
+  })
+  
+  const { signPermit2612 } = usePermit2612({
+    bondToken: question?.bondToken as `0x${string}`,
+    realitioAddress: deployments?.realitioERC20 as `0x${string}`,
+    chainId
+  })
+  
+  // Calculate fee when bond amount changes
+  useEffect(() => {
+    async function calculateFeeQuote() {
+      if (!bondTokenInfo || !publicClient || !answerForm.bond || !deployments?.realitioERC20) return
+      
+      try {
+        const bondRaw = bondTokenInfo?.decimals
+          ? parseUnits(answerForm.bond || '0', bondTokenInfo.decimals)
+          : parseEther(answerForm.bond || '0')
+        
+        const quote = await quoteFee({
+          client: publicClient,
+          reality: deployments.realitioERC20 as `0x${string}`,
+          bondTokenDecimals: bondTokenInfo?.decimals || 18,
+          bondRaw,
+          feeBpsFallback: feeInfo?.feeBps || 25
+        })
+        
+        setFeeQuote({ feeFormatted: quote.feeFormatted, totalFormatted: quote.totalFormatted })
+      } catch (err) {
+        console.error('Error calculating fee:', err)
+      }
+    }
+    
+    calculateFeeQuote()
+  }, [answerForm.bond, bondTokenInfo, publicClient, deployments, feeInfo])
 
   const handleSubmitAnswer = async () => {
     if (!walletClient || !address || !publicClient) return
@@ -103,21 +153,18 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
       const addresses = await getDeployedAddresses(chainId)
       if (!addresses) throw new Error('Contract addresses not found')
       
-      const bondAmount = parseEther(answerForm.bond)
+      const bondAmount = bondTokenInfo?.decimals 
+        ? parseUnits(answerForm.bond, bondTokenInfo.decimals)
+        : parseEther(answerForm.bond)
       
-      // Approve token if needed
-      if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
-        await walletClient.writeContract({
-          address: question.bondToken as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: 'approve',
-          args: [addresses.realitioERC20 as `0x${string}`, bondAmount],
-        })
-      }
+      // Calculate fee
+      const feeAmount = feeInfo ? (bondAmount * BigInt(feeInfo.feeBps)) / 10000n : 0n
+      const totalAmount = bondAmount + feeAmount
+      
+      const answerBytes = pad(toHex(BigInt(answerForm.answer)), { size: 32 })
       
       if (answerForm.isCommit) {
         // Submit commitment
-        const answerBytes = pad(toHex(BigInt(answerForm.answer)), { size: 32 })
         const nonceBytes = keccak256(toHex(answerForm.nonce))
         const answerHash = keccak256(
           encodeAbiParameters(
@@ -126,30 +173,86 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
           )
         )
         
-        await walletClient.writeContract({
-          address: addresses.realitioERC20 as `0x${string}`,
-          abi: REALITIO_ABI,
-          functionName: 'submitAnswerCommitment',
-          args: [questionId, answerHash, bondAmount],
-        })
-      } else {
-        // Submit answer directly
-        const answerBytes = pad(toHex(BigInt(answerForm.answer)), { size: 32 })
-        
-        if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
+        if (paymentMode === 'permit2' && deployments?.PERMIT2) {
+          // Use Permit2
+          const { permit, signature } = await signPermit2(totalAmount)
           await walletClient.writeContract({
             address: addresses.realitioERC20 as `0x${string}`,
             abi: REALITIO_ABI,
-            functionName: 'submitAnswerWithToken',
-            args: [questionId, answerBytes, bondAmount, question.bondToken as `0x${string}`],
+            functionName: 'submitAnswerCommitmentWithPermit2',
+            args: [questionId, answerHash, bondAmount, permit, signature, address],
+          })
+        } else if (paymentMode === 'permit2612') {
+          // Use EIP-2612 Permit
+          const { deadline, v, r, s } = await signPermit2612(totalAmount)
+          const bondToken = question.bondToken || deployments?.USDT || '0x0000000000000000000000000000000000000000'
+          await walletClient.writeContract({
+            address: addresses.realitioERC20 as `0x${string}`,
+            abi: REALITIO_ABI,
+            functionName: 'submitAnswerCommitmentWithPermit2612',
+            args: [questionId, answerHash, bondAmount, bondToken as `0x${string}`, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`],
           })
         } else {
+          // Traditional approve flow
+          if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
+            await walletClient.writeContract({
+              address: question.bondToken as `0x${string}`,
+              abi: ERC20_ABI,
+              functionName: 'approve',
+              args: [addresses.realitioERC20 as `0x${string}`, totalAmount],
+            })
+          }
           await walletClient.writeContract({
             address: addresses.realitioERC20 as `0x${string}`,
             abi: REALITIO_ABI,
-            functionName: 'submitAnswer',
-            args: [questionId, answerBytes, bondAmount],
+            functionName: 'submitAnswerCommitment',
+            args: [questionId, answerHash, bondAmount],
           })
+        }
+      } else {
+        // Submit answer directly
+        if (paymentMode === 'permit2' && deployments?.PERMIT2) {
+          // Use Permit2
+          const { permit, signature } = await signPermit2(totalAmount)
+          await walletClient.writeContract({
+            address: addresses.realitioERC20 as `0x${string}`,
+            abi: REALITIO_ABI,
+            functionName: 'submitAnswerWithPermit2',
+            args: [questionId, answerBytes, bondAmount, permit, signature, address],
+          })
+        } else if (paymentMode === 'permit2612') {
+          // Use EIP-2612 Permit
+          const { deadline, v, r, s } = await signPermit2612(totalAmount)
+          const bondToken = question.bondToken || deployments?.USDT || '0x0000000000000000000000000000000000000000'
+          await walletClient.writeContract({
+            address: addresses.realitioERC20 as `0x${string}`,
+            abi: REALITIO_ABI,
+            functionName: 'submitAnswerWithPermit2612',
+            args: [questionId, answerBytes, bondAmount, bondToken as `0x${string}`, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`],
+          })
+        } else {
+          // Traditional approve flow
+          if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
+            await walletClient.writeContract({
+              address: question.bondToken as `0x${string}`,
+              abi: ERC20_ABI,
+              functionName: 'approve',
+              args: [addresses.realitioERC20 as `0x${string}`, totalAmount],
+            })
+            await walletClient.writeContract({
+              address: addresses.realitioERC20 as `0x${string}`,
+              abi: REALITIO_ABI,
+              functionName: 'submitAnswerWithToken',
+              args: [questionId, answerBytes, bondAmount, question.bondToken as `0x${string}`],
+            })
+          } else {
+            await walletClient.writeContract({
+              address: addresses.realitioERC20 as `0x${string}`,
+              abi: REALITIO_ABI,
+              functionName: 'submitAnswer',
+              args: [questionId, answerBytes, bondAmount],
+            })
+          }
         }
       }
       
@@ -244,7 +347,12 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        {gated && (
+          <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
+            Please connect KaiaWallet to the correct network (Mainnet {KAIA_MAINNET_ID} or Kairos {KAIA_TESTNET_ID}).
+          </div>
+        )}
+        <div className={`bg-white overflow-hidden shadow rounded-lg ${gated ? 'opacity-50' : ''}`}>
           <div className="px-4 py-5 sm:p-6">
             <h2 className="text-2xl font-bold mb-6">Question Details</h2>
             
@@ -332,10 +440,14 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                       <p className="mt-1 text-sm text-gray-500">
                         Minimum: {formatEther(minBond)} {bondTokenInfo?.symbol || 'tokens'}
                       </p>
-                      {feeInfo && (
-                        <p className="mt-1 text-sm text-orange-600">
-                          + {(feeInfo.feeBps / 100).toFixed(2)}% fee will be charged on top
-                        </p>
+                      {feeQuote && bondTokenInfo && feeInfo && answerForm.bond && (
+                        <FeeNotice
+                          feeFormatted={feeQuote.feeFormatted}
+                          totalFormatted={feeQuote.totalFormatted}
+                          symbol={bondTokenInfo.symbol}
+                          feeBps={feeInfo.feeBps}
+                          feeRecipient={feeInfo.feeRecipient as `0x${string}`}
+                        />
                       )}
                     </div>
                     
@@ -367,6 +479,17 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                       </div>
                     )}
                     
+                    {/* Payment Mode Selector */}
+                    {question.bondToken && answerForm.bond && (
+                      <PaymentModeSelector
+                        bondToken={question.bondToken as `0x${string}`}
+                        bondAmount={bondTokenInfo?.decimals ? parseUnits(answerForm.bond, bondTokenInfo.decimals) : parseEther(answerForm.bond)}
+                        feeAmount={feeInfo ? ((bondTokenInfo?.decimals ? parseUnits(answerForm.bond, bondTokenInfo.decimals) : parseEther(answerForm.bond)) * BigInt(feeInfo.feeBps)) / 10000n : 0n}
+                        deployments={deployments}
+                        onModeChange={setPaymentMode}
+                      />
+                    )}
+                    
                     <button
                       onClick={handleSubmitAnswer}
                       disabled={actionLoading || !address || gated}
@@ -379,6 +502,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                 
                 <div className="border-t pt-6">
                   <h3 className="text-lg font-medium mb-4">Reveal Commitment</h3>
+                  <p className="text-sm text-gray-500 mb-4">No fee required for revealing answers</p>
                   
                   <div className="space-y-4">
                     <div>

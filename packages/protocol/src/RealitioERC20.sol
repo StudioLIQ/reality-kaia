@@ -6,6 +6,20 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RealityLib} from "./RealityLib.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IPermit2} from "./interfaces/IPermit2.sol";
+
+// EIP-2612 interface for permit
+interface IERC20Permit {
+    function permit(
+        address owner,
+        address spender, 
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+}
 
 contract RealitioERC20 is IReality, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -14,6 +28,7 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
     // Fee configuration
     uint16 public immutable feeBps;
     address public immutable feeRecipient;
+    address public immutable PERMIT2;
 
     struct Question {
         address arbitrator;
@@ -47,11 +62,12 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
     // Events for fees
     event LogFeeCharged(bytes32 indexed questionId, address indexed payer, address bondToken, uint256 bond, uint256 fee);
     
-    constructor(address _feeRecipient, uint16 _feeBps) {
+    constructor(address _feeRecipient, uint16 _feeBps, address _permit2) {
         require(_feeBps <= 1000, "Fee too high (max 10%)");
         require(_feeRecipient != address(0), "Invalid fee recipient");
         feeBps = _feeBps;
         feeRecipient = _feeRecipient;
+        PERMIT2 = _permit2;
     }
 
     modifier questionExists(bytes32 questionId) {
@@ -96,6 +112,14 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
      */
     function bondTokenOf(bytes32 questionId) external view returns (address) {
         return questions[questionId].bondToken;
+    }
+    
+    /**
+     * @dev Get Permit2 contract address
+     * @return The Permit2 contract address
+     */
+    function permit2() external view returns (address) {
+        return PERMIT2;
     }
 
     function askQuestion(
@@ -249,23 +273,7 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
             }
         }
         
-        if (q.bestAnswerer != address(0) && q.bestAnswer != answer) {
-            totalClaimable[questionId] += q.bestBond;
-        }
-        
-        if (bondsByAnswerer[questionId][msg.sender] == 0) {
-            answerers[questionId].push(msg.sender);
-        }
-        
-        answersByAnswerer[questionId][msg.sender] = answer;
-        bondsByAnswerer[questionId][msg.sender] = bond;
-        
-        q.bestAnswer = answer;
-        q.bestBond = bond;
-        q.bestAnswerer = msg.sender;
-        q.lastAnswerTs = uint64(block.timestamp);
-        
-        emit LogNewAnswer(questionId, answer, msg.sender, bond, block.timestamp);
+        _processAnswerSubmission(questionId, q, answer, bond, msg.sender);
     }
 
     function submitAnswerCommitment(
@@ -303,6 +311,235 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
         emit LogNewCommitment(questionId, answerHash, msg.sender, bond, block.timestamp);
     }
 
+    /**
+     * @dev Submit answer with Permit2 signature (single transaction)
+     */
+    function submitAnswerWithPermit2(
+        bytes32 questionId,
+        bytes32 answer,
+        uint256 bond,
+        IPermit2.PermitTransferFrom calldata permit,
+        bytes calldata signature,
+        address owner
+    ) external nonReentrant questionExists(questionId) notFinalized(questionId) {
+        Question storage q = questions[questionId];
+        
+        require(block.timestamp >= q.openingTs, "Question not yet open");
+        require(!q.arbitrationPending, "Arbitration pending");
+        
+        uint256 minBond = RealityLib.calculateMinBond(q.bestBond);
+        require(bond >= minBond, "Bond too low");
+        
+        if (q.bondToken == address(0)) {
+            revert("Bond token not set");
+        }
+        
+        // Calculate fee
+        (uint256 fee, uint256 total) = feeOn(bond);
+        
+        // Verify permit matches our requirements
+        require(permit.permitted.token == q.bondToken, "TOKEN_MISMATCH");
+        require(permit.permitted.amount >= total, "PERMIT_INSUFF_TOTAL");
+        
+        // Transfer total amount (bond + fee) from owner to this contract via Permit2
+        IPermit2(PERMIT2).permitTransferFrom(
+            permit,
+            IPermit2.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: total
+            }),
+            owner,
+            signature
+        );
+        
+        // Transfer fee to fee recipient
+        if (fee > 0) {
+            IERC20(q.bondToken).safeTransfer(feeRecipient, fee);
+            emit LogFeeCharged(questionId, owner, q.bondToken, bond, fee);
+        }
+        
+        // Process the answer submission (reuse internal logic)
+        _processAnswerSubmission(questionId, q, answer, bond, owner);
+    }
+    
+    /**
+     * @dev Submit answer commitment with Permit2 signature
+     */
+    function submitAnswerCommitmentWithPermit2(
+        bytes32 questionId,
+        bytes32 answerHash,
+        uint256 bond,
+        IPermit2.PermitTransferFrom calldata permit,
+        bytes calldata signature,
+        address owner
+    ) external nonReentrant questionExists(questionId) notFinalized(questionId) {
+        Question storage q = questions[questionId];
+        
+        require(block.timestamp >= q.openingTs, "Question not yet open");
+        require(!q.arbitrationPending, "Arbitration pending");
+        
+        uint256 minBond = RealityLib.calculateMinBond(q.bestBond);
+        require(bond >= minBond, "Bond too low");
+        
+        Commitment storage c = commitments[questionId][owner];
+        require(c.answerHash == bytes32(0), "Already committed");
+        
+        if (q.bondToken == address(0)) {
+            revert("Bond token not set");
+        }
+        
+        // Calculate fee
+        (uint256 fee, uint256 total) = feeOn(bond);
+        
+        // Verify permit matches our requirements
+        require(permit.permitted.token == q.bondToken, "TOKEN_MISMATCH");
+        require(permit.permitted.amount >= total, "PERMIT_INSUFF_TOTAL");
+        
+        // Transfer total amount via Permit2
+        IPermit2(PERMIT2).permitTransferFrom(
+            permit,
+            IPermit2.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: total
+            }),
+            owner,
+            signature
+        );
+        
+        // Transfer fee to fee recipient
+        if (fee > 0) {
+            IERC20(q.bondToken).safeTransfer(feeRecipient, fee);
+            emit LogFeeCharged(questionId, owner, q.bondToken, bond, fee);
+        }
+        
+        // Store commitment
+        c.answerHash = answerHash;
+        c.bond = bond;
+        c.commitTs = uint64(block.timestamp);
+        
+        emit LogNewCommitment(questionId, answerHash, owner, bond, block.timestamp);
+    }
+    
+    /**
+     * @dev Submit answer with EIP-2612 permit (single transaction)
+     */
+    function submitAnswerWithPermit2612(
+        bytes32 questionId,
+        bytes32 answer,
+        uint256 bond,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s,
+        address owner
+    ) external nonReentrant questionExists(questionId) notFinalized(questionId) {
+        Question storage q = questions[questionId];
+        
+        require(block.timestamp >= q.openingTs, "Question not yet open");
+        require(!q.arbitrationPending, "Arbitration pending");
+        
+        uint256 minBond = RealityLib.calculateMinBond(q.bestBond);
+        require(bond >= minBond, "Bond too low");
+        
+        if (q.bondToken == address(0)) {
+            revert("Bond token not set");
+        }
+        
+        // Calculate fee
+        (uint256 fee, uint256 total) = feeOn(bond);
+        
+        // Call permit on the token
+        IERC20Permit(q.bondToken).permit(owner, address(this), total, deadline, v, r, s);
+        
+        // Transfer bond + fee from owner
+        IERC20(q.bondToken).safeTransferFrom(owner, address(this), bond);
+        if (fee > 0) {
+            IERC20(q.bondToken).safeTransferFrom(owner, feeRecipient, fee);
+            emit LogFeeCharged(questionId, owner, q.bondToken, bond, fee);
+        }
+        
+        // Process the answer submission
+        _processAnswerSubmission(questionId, q, answer, bond, owner);
+    }
+    
+    /**
+     * @dev Submit answer commitment with EIP-2612 permit
+     */
+    function submitAnswerCommitmentWithPermit2612(
+        bytes32 questionId,
+        bytes32 answerHash,
+        uint256 bond,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s,
+        address owner
+    ) external nonReentrant questionExists(questionId) notFinalized(questionId) {
+        Question storage q = questions[questionId];
+        
+        require(block.timestamp >= q.openingTs, "Question not yet open");
+        require(!q.arbitrationPending, "Arbitration pending");
+        
+        uint256 minBond = RealityLib.calculateMinBond(q.bestBond);
+        require(bond >= minBond, "Bond too low");
+        
+        Commitment storage c = commitments[questionId][owner];
+        require(c.answerHash == bytes32(0), "Already committed");
+        
+        if (q.bondToken == address(0)) {
+            revert("Bond token not set");
+        }
+        
+        // Calculate fee
+        (uint256 fee, uint256 total) = feeOn(bond);
+        
+        // Call permit on the token
+        IERC20Permit(q.bondToken).permit(owner, address(this), total, deadline, v, r, s);
+        
+        // Transfer bond + fee from owner
+        IERC20(q.bondToken).safeTransferFrom(owner, address(this), bond);
+        if (fee > 0) {
+            IERC20(q.bondToken).safeTransferFrom(owner, feeRecipient, fee);
+            emit LogFeeCharged(questionId, owner, q.bondToken, bond, fee);
+        }
+        
+        // Store commitment
+        c.answerHash = answerHash;
+        c.bond = bond;
+        c.commitTs = uint64(block.timestamp);
+        
+        emit LogNewCommitment(questionId, answerHash, owner, bond, block.timestamp);
+    }
+    
+    /**
+     * @dev Internal helper to process answer submission logic
+     */
+    function _processAnswerSubmission(
+        bytes32 questionId,
+        Question storage q,
+        bytes32 answer,
+        uint256 bond,
+        address answerer
+    ) internal {
+        if (q.bestAnswerer != address(0) && q.bestAnswer != answer) {
+            totalClaimable[questionId] += q.bestBond;
+        }
+        
+        if (bondsByAnswerer[questionId][answerer] == 0) {
+            answerers[questionId].push(answerer);
+        }
+        
+        answersByAnswerer[questionId][answerer] = answer;
+        bondsByAnswerer[questionId][answerer] = bond;
+        
+        q.bestAnswer = answer;
+        q.bestBond = bond;
+        q.bestAnswerer = answerer;
+        q.lastAnswerTs = uint64(block.timestamp);
+        
+        emit LogNewAnswer(questionId, answer, answerer, bond, block.timestamp);
+    }
+    
     function revealAnswer(
         bytes32 questionId,
         bytes32 answer,

@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { USDT_MAINNET, WKAIA_MAINNET, WKAIA_TESTNET, type Addr } from './viem'
+import { getDeployments } from './deployments.generated'
 
 export const REALITIO_ABI = [
   {
@@ -47,6 +48,100 @@ export const REALITIO_ABI = [
       { "internalType": "uint256", "name": "bond", "type": "uint256" }
     ],
     "name": "submitAnswerCommitment",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "answer", "type": "bytes32" },
+      { "internalType": "uint256", "name": "bond", "type": "uint256" },
+      {
+        "components": [
+          {
+            "components": [
+              { "internalType": "address", "name": "token", "type": "address" },
+              { "internalType": "uint256", "name": "amount", "type": "uint256" }
+            ],
+            "internalType": "struct ISignatureTransfer.TokenPermissions",
+            "name": "permitted",
+            "type": "tuple"
+          },
+          { "internalType": "uint256", "name": "nonce", "type": "uint256" },
+          { "internalType": "uint256", "name": "deadline", "type": "uint256" }
+        ],
+        "internalType": "struct ISignatureTransfer.PermitTransferFrom",
+        "name": "permit",
+        "type": "tuple"
+      },
+      { "internalType": "bytes", "name": "signature", "type": "bytes" },
+      { "internalType": "address", "name": "bondToken", "type": "address" }
+    ],
+    "name": "submitAnswerWithPermit2",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "answerHash", "type": "bytes32" },
+      { "internalType": "uint256", "name": "bond", "type": "uint256" },
+      {
+        "components": [
+          {
+            "components": [
+              { "internalType": "address", "name": "token", "type": "address" },
+              { "internalType": "uint256", "name": "amount", "type": "uint256" }
+            ],
+            "internalType": "struct ISignatureTransfer.TokenPermissions",
+            "name": "permitted",
+            "type": "tuple"
+          },
+          { "internalType": "uint256", "name": "nonce", "type": "uint256" },
+          { "internalType": "uint256", "name": "deadline", "type": "uint256" }
+        ],
+        "internalType": "struct ISignatureTransfer.PermitTransferFrom",
+        "name": "permit",
+        "type": "tuple"
+      },
+      { "internalType": "bytes", "name": "signature", "type": "bytes" },
+      { "internalType": "address", "name": "bondToken", "type": "address" }
+    ],
+    "name": "submitAnswerCommitmentWithPermit2",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "answer", "type": "bytes32" },
+      { "internalType": "uint256", "name": "bond", "type": "uint256" },
+      { "internalType": "address", "name": "bondToken", "type": "address" },
+      { "internalType": "uint256", "name": "deadline", "type": "uint256" },
+      { "internalType": "uint8", "name": "v", "type": "uint8" },
+      { "internalType": "bytes32", "name": "r", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "s", "type": "bytes32" }
+    ],
+    "name": "submitAnswerWithPermit2612",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "answerHash", "type": "bytes32" },
+      { "internalType": "uint256", "name": "bond", "type": "uint256" },
+      { "internalType": "address", "name": "bondToken", "type": "address" },
+      { "internalType": "uint256", "name": "deadline", "type": "uint256" },
+      { "internalType": "uint8", "name": "v", "type": "uint8" },
+      { "internalType": "bytes32", "name": "r", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "s", "type": "bytes32" }
+    ],
+    "name": "submitAnswerCommitmentWithPermit2612",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -276,7 +371,7 @@ export function resolveBondTokens(chainId: number, deployments: any): BondToken[
   return TOKENS
 }
 
-export async function getDeployments(chainId: number): Promise<any | null> {
+export async function getDeploymentsFromApi(chainId: number): Promise<any | null> {
   try {
     const response = await fetch(`/api/deployments/${chainId}`)
     if (!response.ok) return null
@@ -353,4 +448,33 @@ export async function resolveBondTokensWithStatus(
     out.push({...t, active});
   }
   return out;
+}
+
+export interface DeploymentAddresses {
+  realitioERC20: string;
+  arbitratorSimple: string;
+  zapperWKAIA: string;
+  feeRecipient: string;
+  feeBps: number;
+  WKAIA: string;
+  USDT?: string;
+  MockUSDT?: string;
+  deployer: string;
+}
+
+export function loadAddresses(chainId: number): DeploymentAddresses | undefined {
+  const deployments = getDeployments(chainId);
+  if (!deployments) return undefined;
+
+  return {
+    realitioERC20: deployments.realitioERC20,
+    arbitratorSimple: deployments.arbitratorSimple,
+    zapperWKAIA: deployments.zapperWKAIA,
+    feeRecipient: deployments.feeRecipient,
+    feeBps: deployments.feeBps,
+    WKAIA: deployments.WKAIA,
+    USDT: deployments.USDT,
+    MockUSDT: deployments.MockUSDT,
+    deployer: deployments.deployer,
+  };
 }

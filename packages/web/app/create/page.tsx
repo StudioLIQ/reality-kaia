@@ -7,15 +7,18 @@ import {
   REALITIO_ERC20_ABI, 
   ERC20_ABI,
   getDeployedAddresses, 
-  getDeployments,
   resolveBondTokens,
   resolveBondTokensWithStatus,
   calculateFee,
   type BondToken
 } from '@/lib/contracts'
+import { getDeployments } from '@/lib/deployments.generated'
 import { USDT_MAINNET, type Addr } from '@/lib/viem'
-import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput } from '@/lib/time'
+import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput, fromNow } from '@/lib/time'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
+import { TOKENS_FOR } from '@/lib/tokens'
+import { quoteFee } from '@/lib/fees'
+import FeeNotice from '@/components/FeeNotice'
 import { useRouter } from 'next/navigation'
 
 interface BondTokenWithStatus extends BondToken {
@@ -39,6 +42,8 @@ export default function CreateQuestion() {
   const [timeoutSec, setTimeoutSec] = useState<number>(TIMEOUT_PRESETS[0].seconds)
   const [timeoutUnit, setTimeoutUnit] = useState<'s'|'m'|'h'|'d'>('h')
   const [timeoutInput, setTimeoutInput] = useState<number>(24)
+  const [bondAmount, setBondAmount] = useState<string>('100')
+  const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
   const [useNow, setUseNow] = useState(true)
   const [openingTs, setOpeningTs] = useState<number>(Math.floor(Date.now()/1000))
   const [loading, setLoading] = useState(false)
@@ -54,6 +59,32 @@ export default function CreateQuestion() {
     const sec = Math.max(1, Math.floor(timeoutInput * unitSeconds[timeoutUnit]))
     setTimeoutSec(sec)
   }, [timeoutInput, timeoutUnit])
+
+  // Calculate fee when bond amount changes
+  useEffect(() => {
+    async function calculateFeeQuote() {
+      if (!bondToken || !publicClient || !bondAmount) return
+      
+      const addresses = await getDeployedAddresses(chainId)
+      if (!addresses?.realitioERC20) return
+      
+      try {
+        const bondRaw = parseUnits(bondAmount || '0', bondToken.decimals)
+        const quote = await quoteFee({
+          client: publicClient,
+          reality: addresses.realitioERC20 as Addr,
+          bondTokenDecimals: bondToken.decimals,
+          bondRaw,
+          feeBpsFallback: feeInfo?.feeBps || 25
+        })
+        setFeeQuote({ feeFormatted: quote.feeFormatted, totalFormatted: quote.totalFormatted })
+      } catch (err) {
+        console.error('Error calculating fee:', err)
+      }
+    }
+    
+    calculateFeeQuote()
+  }, [bondAmount, bondToken, publicClient, chainId, feeInfo])
 
   useEffect(() => {
     async function loadTokens() {
@@ -291,6 +322,34 @@ export default function CreateQuestion() {
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                   placeholder="Leave empty to use default arbitrator"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="bondAmount" className="block text-sm font-medium text-gray-700">
+                  Initial Bond Amount
+                </label>
+                <div className="mt-1 relative">
+                  <input
+                    type="text"
+                    id="bondAmount"
+                    value={bondAmount}
+                    onChange={(e) => setBondAmount(e.target.value)}
+                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm pr-16"
+                    placeholder="100"
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">{bondToken?.symbol || 'tokens'}</span>
+                  </div>
+                </div>
+                {feeQuote && bondToken && feeInfo && (
+                  <FeeNotice
+                    feeFormatted={feeQuote.feeFormatted}
+                    totalFormatted={feeQuote.totalFormatted}
+                    symbol={bondToken.symbol}
+                    feeBps={feeInfo.feeBps}
+                    feeRecipient={feeInfo.feeRecipient as `0x${string}`}
+                  />
+                )}
               </div>
 
               <div>

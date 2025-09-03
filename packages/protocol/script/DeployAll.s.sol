@@ -6,6 +6,7 @@ import {RealitioERC20} from "../src/RealitioERC20.sol";
 import {ArbitratorSimple} from "../src/ArbitratorSimple.sol";
 import {MockUSDT} from "../src/tokens/MockUSDT.sol";
 import {ZapperWKAIA} from "../src/zapper/ZapperWKAIA.sol";
+import {DeployPermit2} from "./DeployPermit2.s.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 
 contract DeployAll is Script {
@@ -32,6 +33,10 @@ contract DeployAll is Script {
         // Determine WKAIA address based on chain
         address wkaia = block.chainid == 8217 ? wkaiaMainnet : wkaiaTestnet;
         
+        // Determine Permit2 address - same address on both Kaia networks
+        address permit2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+        console2.log("Using Permit2:", permit2);
+        
         // Deploy MockUSDT only on testnet
         address mockUSDT = address(0);
         if (block.chainid == 1001) {
@@ -40,11 +45,12 @@ contract DeployAll is Script {
             console2.log("MockUSDT (tUSDT) deployed at:", mockUSDT);
         }
         
-        // Deploy RealitioERC20 with fee configuration from env
-        RealitioERC20 realitio = new RealitioERC20(feeRecipient, feeBps);
+        // Deploy RealitioERC20 with fee configuration and Permit2
+        RealitioERC20 realitio = new RealitioERC20(feeRecipient, feeBps, permit2);
         console2.log("RealitioERC20 deployed at:", address(realitio));
         console2.log("  Fee recipient:", feeRecipient);
         console2.log("  Fee BPS:", feeBps);
+        console2.log("  Permit2:", permit2);
         
         // Deploy ArbitratorSimple with 1-of-1 multisig (deployer as sole signer)
         address[] memory signers = new address[](1);
@@ -68,6 +74,7 @@ contract DeployAll is Script {
         console2.log("FEE_RECIPIENT:", feeRecipient);
         console2.log("FEE_BPS:", feeBps);
         console2.log("WKAIA:", wkaia);
+        console2.log("PERMIT2:", permit2);
         if (block.chainid == 1001 && mockUSDT != address(0)) {
             console2.log("MOCK_USDT:", mockUSDT);
         }

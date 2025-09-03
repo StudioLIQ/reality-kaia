@@ -1,32 +1,21 @@
 'use client'
 
-import '@rainbow-me/rainbowkit/styles.css'
-import { getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit'
-import { WagmiProvider, useChainId, useSwitchChain, useAccount } from 'wagmi'
+import { WagmiProvider, useAccount, useChainId, useSwitchChain, useConnect, useDisconnect } from 'wagmi'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
-import { kaiaMainnet, kaiaTestnet } from '@/lib/viem'
+import { config } from '@/lib/wagmi'
 import { networkStatus, chainLabel, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
+import { ConnectKitButton } from '@/components/ConnectButton'
 
 const queryClient = new QueryClient()
-
-const config = getDefaultConfig({
-  appName: 'RealitioERC20',
-  projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID || 'YOUR_PROJECT_ID',
-  chains: [kaiaMainnet, kaiaTestnet],
-  ssr: true,
-})
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider
-          initialChain={kaiaMainnet}
-        >
-          <NetworkBadge />
-          {children}
-        </RainbowKitProvider>
+        <NetworkBadge />
+        <ConnectKitButton />
+        {children}
       </QueryClientProvider>
     </WagmiProvider>
   )
