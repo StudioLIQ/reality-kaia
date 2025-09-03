@@ -1,13 +1,12 @@
 {
   "name": "Orakore",
   "short_name": "Orakore",
-  "description": "Orakore — Reality.eth-driven oracle on Kaia. Personal project, not audited.",
+  "description": "Orakore — Reality.eth-driven oracle on Kaia.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#10b981",
   "icons": [
-    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192" },
-    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512" }
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

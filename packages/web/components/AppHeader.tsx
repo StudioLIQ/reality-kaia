@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from 'next/link';
 import WalletNetworkButton from '@/components/WalletNetworkButton';
 import NavLink from '@/components/NavLink';
@@ -7,12 +8,17 @@ export default function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-neutral-950/70 backdrop-blur">
       <div className="mx-auto max-w-6xl h-14 px-4 flex items-center gap-3">
-        {/* brand */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg bg-emerald-400/10 border border-emerald-400/30 flex items-center justify-center group-hover:bg-emerald-400/20 transition-colors">
-            <span className="text-emerald-400 font-bold text-sm">O</span>
-          </div>
-          <span className="font-semibold text-white hidden sm:block">Orakore</span>
+        {/* brand logo (explicit size) */}
+        <Link href="/" className="flex items-center gap-2">
+          <Image
+            src="/brand/orakore-logo.svg"
+            alt="Orakore logo"
+            width={28}
+            height={28}
+            priority
+            className="hover:opacity-80 transition-opacity"
+          />
+          <span className="sr-only">Orakore</span>
         </Link>
 
         {/* menu */}

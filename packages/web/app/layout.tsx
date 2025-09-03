@@ -30,6 +30,11 @@ export const metadata: Metadata = {
     description:
       "Orakore — a personal, unaudited Reality.eth-driven oracle on Kaia.",
   },
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml", sizes: "any", rel: "icon" },
+    ],
+  },
 }
 
 export default function RootLayout({
