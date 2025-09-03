@@ -1,0 +1,1 @@
+export { default } from "../page"; // reuse landing as Dashboard

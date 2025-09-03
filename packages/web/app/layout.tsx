@@ -10,8 +10,26 @@ import DisclaimerModal from '@/components/DisclaimerModal'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'RealitioERC20 Dashboard',
-  description: 'Oracle system for KAIA chain',
+  title: {
+    default: "Orakore",
+    template: "%s · Orakore",
+  },
+  description:
+    "Orakore — a personal, unaudited Reality.eth-driven oracle on Kaia. Provided AS IS. Use at your own risk.",
+  applicationName: "Orakore",
+  keywords: ["Orakore", "Kaia", "Reality.eth", "oracle", "prediction", "dapp"],
+  openGraph: {
+    title: "Orakore",
+    description:
+      "Orakore — a personal, unaudited Reality.eth-driven oracle on Kaia. Provided AS IS.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Orakore",
+    description:
+      "Orakore — a personal, unaudited Reality.eth-driven oracle on Kaia.",
+  },
 }
 
 export default function RootLayout({
