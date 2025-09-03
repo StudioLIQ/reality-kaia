@@ -5,13 +5,17 @@ import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEther, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
 import { REALITIO_ABI, ERC20_ABI, getDeployedAddresses, resolveBondTokens, getDeployments, type BondToken } from '@/lib/contracts'
 import { CHAIN_LABEL } from '@/lib/viem'
+import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
 
 export default function QuestionDetail({ params }: { params: { id: string } }) {
   const questionId = params.id as `0x${string}`
-  const { address } = useAccount()
+  const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
   const chainId = useChainId()
+  
+  const status = networkStatus(isConnected, chainId)
+  const gated = (status === "NOT_CONNECTED" || status === "WRONG_NETWORK")
   
   const [question, setQuestion] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -365,8 +369,8 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                     
                     <button
                       onClick={handleSubmitAnswer}
-                      disabled={actionLoading || !address}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                      disabled={actionLoading || !address || gated}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {actionLoading ? 'Submitting...' : 'Submit Answer'}
                     </button>
@@ -403,8 +407,8 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                     
                     <button
                       onClick={handleReveal}
-                      disabled={actionLoading || !address}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
+                      disabled={actionLoading || !address || gated}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {actionLoading ? 'Revealing...' : 'Reveal Answer'}
                     </button>
@@ -415,8 +419,8 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                   <div className="border-t pt-6">
                     <button
                       onClick={handleFinalize}
-                      disabled={actionLoading || !address}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                      disabled={actionLoading || !address || gated}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {actionLoading ? 'Finalizing...' : 'Finalize Question'}
                     </button>

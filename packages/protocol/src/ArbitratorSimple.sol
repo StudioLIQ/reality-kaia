@@ -47,7 +47,7 @@ contract ArbitratorSimple {
         }
         
         threshold = _threshold;
-        arbitrationFee = 0.01 ether;
+        arbitrationFee = 100 ether;
     }
 
     function requestArbitration(bytes32 questionId) external payable {

@@ -9,23 +9,22 @@ import {
   getDeployedAddresses, 
   getDeployments,
   resolveBondTokens,
+  resolveBondTokensWithStatus,
   calculateFee,
   type BondToken
 } from '@/lib/contracts'
 import { USDT_MAINNET, type Addr } from '@/lib/viem'
+import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput } from '@/lib/time'
+import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
 import { useRouter } from 'next/navigation'
 
-const TIMEOUT_PRESETS = [
-  { label: '24H', seconds: 24 * 60 * 60 },
-  { label: '3D', seconds: 3 * 24 * 60 * 60 },
-  { label: '7D', seconds: 7 * 24 * 60 * 60 },
-  { label: '1M', seconds: 30 * 24 * 60 * 60 },
-  { label: '3M', seconds: 90 * 24 * 60 * 60 },
-]
+interface BondTokenWithStatus extends BondToken {
+  active: boolean;
+}
 
 export default function CreateQuestion() {
   const router = useRouter()
-  const { address } = useAccount()
+  const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
   const chainId = useChainId()
@@ -34,21 +33,44 @@ export default function CreateQuestion() {
     templateId: '0',
     question: '',
     arbitrator: '',
-    openingTs: '0',
   })
-  const [bondToken, setBondToken] = useState<Addr | null>(null)
-  const [availableTokens, setAvailableTokens] = useState<BondToken[]>([])
-  const [timeout, setTimeout] = useState<number>(24 * 60 * 60)
+  const [bondToken, setBondToken] = useState<BondTokenWithStatus | null>(null)
+  const [availableTokens, setAvailableTokens] = useState<BondTokenWithStatus[]>([])
+  const [timeoutSec, setTimeoutSec] = useState<number>(TIMEOUT_PRESETS[0].seconds)
+  const [timeoutUnit, setTimeoutUnit] = useState<'s'|'m'|'h'|'d'>('h')
+  const [timeoutInput, setTimeoutInput] = useState<number>(24)
+  const [useNow, setUseNow] = useState(true)
+  const [openingTs, setOpeningTs] = useState<number>(Math.floor(Date.now()/1000))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [allowance, setAllowance] = useState<bigint>(0n)
   const [checkingAllowance, setCheckingAllowance] = useState(false)
   const [feeInfo, setFeeInfo] = useState<{ feeBps: number; feeRecipient: string } | null>(null)
 
+  const status = networkStatus(isConnected, chainId)
+  const gated = (status === "NOT_CONNECTED" || status === "WRONG_NETWORK")
+
+  useEffect(() => {
+    const sec = Math.max(1, Math.floor(timeoutInput * unitSeconds[timeoutUnit]))
+    setTimeoutSec(sec)
+  }, [timeoutInput, timeoutUnit])
+
   useEffect(() => {
     async function loadTokens() {
+      if (!publicClient) return
+      
       const deployments = await getDeployments(chainId)
-      const tokens = resolveBondTokens(chainId, deployments)
+      const addresses = await getDeployedAddresses(chainId)
+      
+      if (!deployments || !addresses) return
+      
+      const tokens = await resolveBondTokensWithStatus(
+        publicClient,
+        chainId,
+        deployments,
+        addresses.realitioERC20 as Addr
+      )
+      
       setAvailableTokens(tokens)
       
       // Load fee info from deployments
@@ -60,16 +82,16 @@ export default function CreateQuestion() {
       }
       
       if (tokens.length > 0) {
-        const usdtToken = tokens.find(t => t.label === 'USDT')
-        setBondToken(usdtToken?.address || tokens[0].address)
+        const usdtToken = tokens.find((t: BondTokenWithStatus) => t.label === 'USDT')
+        setBondToken(usdtToken || tokens[0])
       }
     }
     loadTokens()
-  }, [chainId])
+  }, [chainId, publicClient])
 
   useEffect(() => {
     async function checkAllowance() {
-      if (!bondToken || !address || !publicClient) return
+      if (!bondToken?.address || !address || !publicClient) return
       
       setCheckingAllowance(true)
       try {
@@ -77,7 +99,7 @@ export default function CreateQuestion() {
         if (!addresses) return
         
         const allowanceValue = await publicClient.readContract({
-          address: bondToken,
+          address: bondToken.address,
           abi: ERC20_ABI,
           functionName: 'allowance',
           args: [address, addresses.realitioERC20 as Addr],
@@ -95,7 +117,7 @@ export default function CreateQuestion() {
   }, [bondToken, address, publicClient, chainId])
 
   const handleApprove = async () => {
-    if (!walletClient || !bondToken || !address) return
+    if (!walletClient || !bondToken?.address || !address) return
     
     setLoading(true)
     setError('')
@@ -104,16 +126,13 @@ export default function CreateQuestion() {
       const addresses = await getDeployedAddresses(chainId)
       if (!addresses) throw new Error('Contract addresses not found')
       
-      const selectedToken = availableTokens.find(t => t.address === bondToken)
-      if (!selectedToken) throw new Error('Token not found')
-      
       // Calculate total amount with fee
-      const bondAmount = parseUnits('1000000', selectedToken.decimals)
+      const bondAmount = parseUnits('1000000', bondToken.decimals)
       const { total } = calculateFee(bondAmount, feeInfo?.feeBps || 25)
       const amount = total
       
       await walletClient.writeContract({
-        address: bondToken,
+        address: bondToken.address,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [addresses.realitioERC20 as Addr, amount],
@@ -130,8 +149,13 @@ export default function CreateQuestion() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!walletClient || !address || !bondToken) {
+    if (!walletClient || !address || !bondToken?.address) {
       setError('Please connect your wallet and select a bond token')
+      return
+    }
+
+    if (!bondToken.active) {
+      setError('Please select an active bond token')
       return
     }
 
@@ -148,19 +172,19 @@ export default function CreateQuestion() {
       const nonce = keccak256(randomValue)
       
       const arbitratorAddress = formData.arbitrator || addresses.arbitratorSimple
-      const openingTs = formData.openingTs === '0' ? Math.floor(Date.now() / 1000) : parseInt(formData.openingTs)
+      const currentOpeningTs = useNow ? Math.floor(Date.now() / 1000) : openingTs
 
       const hash = await walletClient.writeContract({
         address: addresses.realitioERC20 as Addr,
         abi: REALITIO_ERC20_ABI,
         functionName: 'askQuestionERC20',
         args: [
-          bondToken,
+          bondToken.address,
           parseInt(formData.templateId),
           formData.question,
           arbitratorAddress as Addr,
-          timeout,
-          openingTs,
+          timeoutSec,
+          currentOpeningTs,
           nonce,
         ],
       })
@@ -177,29 +201,38 @@ export default function CreateQuestion() {
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
+        {gated && (
+          <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
+            Please connect KaiaWallet to the correct network (Mainnet {KAIA_MAINNET_ID} or Kairos {KAIA_TESTNET_ID}).
+          </div>
+        )}
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <h2 className="text-2xl font-bold mb-6">Create New Question</h2>
             
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className={`space-y-6 ${gated ? 'pointer-events-none opacity-50' : ''}`}>
               <div>
-                <label htmlFor="bondToken" className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700">
                   Bond Token
                 </label>
-                <select
-                  id="bondToken"
-                  value={bondToken || ''}
-                  onChange={(e) => setBondToken(e.target.value as Addr)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  required
-                >
-                  <option value="" disabled>Select a bond token</option>
-                  {availableTokens.map(token => (
-                    <option key={token.address} value={token.address}>
-                      {token.label} ({token.symbol})
-                    </option>
+                <div className="flex gap-2 mt-2">
+                  {availableTokens.map(t => (
+                    <button
+                      key={t.address}
+                      type="button"
+                      onClick={() => setBondToken(t)}
+                      className={`px-3 py-1 rounded-full border ${bondToken?.address === t.address ? 'border-indigo-400 bg-indigo-400/10' : 'border-gray-300'}`}
+                    >
+                      {t.label}
+                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded ${t.active ? 'bg-green-400/10 text-green-600 border border-green-400/30' : 'bg-gray-100 text-gray-500 border border-gray-300'}`}>
+                        {t.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </button>
                   ))}
-                </select>
+                </div>
+                {bondToken && !bondToken.active && (
+                  <p className="mt-2 text-xs text-red-600">This token is not allowed by the oracle. Choose an Active token.</p>
+                )}
                 {bondToken && feeInfo && (
                   <p className="mt-2 text-sm text-gray-500">
                     Fee: {(feeInfo.feeBps / 100).toFixed(2)}% (paid to {feeInfo.feeRecipient.slice(0, 6)}...{feeInfo.feeRecipient.slice(-4)})
@@ -209,8 +242,8 @@ export default function CreateQuestion() {
                   <button
                     type="button"
                     onClick={handleApprove}
-                    disabled={loading || checkingAllowance}
-                    className="mt-2 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    disabled={loading || checkingAllowance || !bondToken.active}
+                    className="mt-2 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {checkingAllowance ? 'Checking...' : 'Approve Token'}
                   </button>
@@ -265,39 +298,69 @@ export default function CreateQuestion() {
                   Timeout
                 </label>
                 <div className="flex gap-2">
-                  {TIMEOUT_PRESETS.map(preset => (
+                  {TIMEOUT_PRESETS.map(p => (
                     <button
-                      key={preset.label}
+                      key={p.label}
                       type="button"
-                      onClick={() => setTimeout(preset.seconds)}
-                      className={`px-3 py-1.5 text-sm font-medium rounded-md ${
-                        timeout === preset.seconds
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
+                      className={`px-3 py-1 rounded-full border ${timeoutSec === p.seconds ? 'border-indigo-400 bg-indigo-400/10' : 'border-gray-300'}`}
+                      onClick={() => { setTimeoutSec(p.seconds); setTimeoutInput(p.seconds/3600); setTimeoutUnit('h'); }}
                     >
-                      {preset.label}
+                      {p.label}
                     </button>
                   ))}
+                  <span className={`px-2 text-xs rounded ${TIMEOUT_PRESETS.some(p => p.seconds === timeoutSec) ? 'opacity-40' : 'bg-gray-100'}`}>Custom</span>
                 </div>
-                <p className="mt-1 text-sm text-gray-500">
-                  Selected: {timeout} seconds ({Math.floor(timeout / 86400)} days, {Math.floor((timeout % 86400) / 3600)} hours)
-                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={timeoutInput}
+                    onChange={e => setTimeoutInput(Number(e.target.value || 1))}
+                    className="w-28 bg-transparent border border-gray-300 rounded px-3 py-2"
+                  />
+                  <select
+                    value={timeoutUnit}
+                    onChange={e => setTimeoutUnit(e.target.value as any)}
+                    className="bg-transparent border border-gray-300 rounded px-2 py-2"
+                  >
+                    <option value="s">Seconds</option>
+                    <option value="m">Minutes</option>
+                    <option value="h">Hours</option>
+                    <option value="d">Days</option>
+                  </select>
+                  <span className="text-xs text-gray-500">= {timeoutSec.toLocaleString()} sec</span>
+                </div>
               </div>
 
               <div>
-                <label htmlFor="openingTs" className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Opening Timestamp
                 </label>
-                <input
-                  type="number"
-                  id="openingTs"
-                  value={formData.openingTs}
-                  onChange={(e) => setFormData({ ...formData, openingTs: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                />
-                <p className="mt-1 text-sm text-gray-500">0 for immediate opening, or Unix timestamp for future opening</p>
+                <div className="flex items-center gap-3">
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={useNow}
+                      onChange={e => {
+                        const v = e.target.checked;
+                        setUseNow(v);
+                        if (v) setOpeningTs(Math.floor(Date.now()/1000));
+                      }}
+                    />
+                    Now
+                  </label>
+                  {!useNow && (
+                    <input
+                      type="datetime-local"
+                      defaultValue={toLocalInput(openingTs)}
+                      onChange={(e) => setOpeningTs(toUnix(e.target.value))}
+                      className="bg-transparent border border-gray-300 rounded px-3 py-2"
+                    />
+                  )}
+                  <span className="text-xs text-gray-500">unix: {openingTs}</span>
+                </div>
               </div>
+
 
               {error && (
                 <div className="rounded-md bg-red-50 p-4">
@@ -308,8 +371,8 @@ export default function CreateQuestion() {
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={loading || !address || !bondToken || allowance === BigInt(0)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  disabled={loading || !address || !bondToken || allowance === BigInt(0) || gated || (bondToken && !bondToken.active)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Creating...' : 'Create Question'}
                 </button>

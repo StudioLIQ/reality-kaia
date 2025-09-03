@@ -2,8 +2,8 @@
 pragma solidity ^0.8.25;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {RealitioERC20} from "../src/oracles/Reality/RealitioERC20.sol";
-import {RealityLib} from "../src/oracles/Reality/RealityLib.sol";
+import {RealitioERC20} from "../src/RealitioERC20.sol";
+import {RealityLib} from "../src/RealityLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {stdJson} from "forge-std/StdJson.sol";

@@ -10,6 +10,10 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 contract RealitioERC20 is IReality, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using RealityLib for *;
+    
+    // Fee configuration
+    uint16 public immutable feeBps;
+    address public immutable feeRecipient;
 
     struct Question {
         address arbitrator;
@@ -39,6 +43,16 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
     mapping(bytes32 => address[]) public answerers;
     mapping(bytes32 => mapping(address => bytes32)) public answersByAnswerer;
     mapping(bytes32 => mapping(address => uint256)) public bondsByAnswerer;
+    
+    // Events for fees
+    event LogFeeCharged(bytes32 indexed questionId, address indexed payer, address bondToken, uint256 bond, uint256 fee);
+    
+    constructor(address _feeRecipient, uint16 _feeBps) {
+        require(_feeBps <= 1000, "Fee too high (max 10%)");
+        require(_feeRecipient != address(0), "Invalid fee recipient");
+        feeBps = _feeBps;
+        feeRecipient = _feeRecipient;
+    }
 
     modifier questionExists(bytes32 questionId) {
         require(questions[questionId].timeout > 0, "Question does not exist");
@@ -53,6 +67,35 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
     modifier isFinalized(bytes32 questionId) {
         require(questions[questionId].finalized, "Question not finalized");
         _;
+    }
+    
+    /**
+     * @dev Calculate fee on a bond amount
+     * @param amount The bond amount
+     * @return fee The fee amount
+     * @return total The total amount (bond + fee)
+     */
+    function feeOn(uint256 amount) public view returns (uint256 fee, uint256 total) {
+        fee = (amount * feeBps) / 10000;
+        total = amount + fee;
+    }
+    
+    /**
+     * @dev Get fee configuration
+     * @return _feeBps The fee in basis points
+     * @return _feeRecipient The fee recipient address
+     */
+    function feeInfo() external view returns (uint16 _feeBps, address _feeRecipient) {
+        return (feeBps, feeRecipient);
+    }
+    
+    /**
+     * @dev Get bond token for a question
+     * @param questionId The question ID
+     * @return The bond token address
+     */
+    function bondTokenOf(bytes32 questionId) external view returns (address) {
+        return questions[questionId].bondToken;
     }
 
     function askQuestion(
@@ -81,6 +124,57 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
         Question storage q = questions[questionId];
         q.arbitrator = arbitrator;
         q.bondToken = address(0);
+        q.timeout = timeout;
+        q.openingTs = openingTs;
+        q.contentHash = RealityLib.calculateContentHash(templateId, question);
+        
+        emit LogNewQuestion(
+            questionId,
+            msg.sender,
+            templateId,
+            question,
+            q.contentHash,
+            arbitrator,
+            timeout,
+            openingTs,
+            nonce,
+            block.timestamp
+        );
+        
+        return questionId;
+    }
+    
+    /**
+     * @dev Ask a question with an ERC20 bond token specified
+     */
+    function askQuestionERC20(
+        address bondToken,
+        uint32 templateId,
+        string calldata question,
+        address arbitrator,
+        uint32 timeout,
+        uint32 openingTs,
+        bytes32 nonce
+    ) external returns (bytes32 questionId) {
+        require(timeout > 24, "Timeout too short");
+        require(openingTs >= block.timestamp || openingTs == 0, "Opening time in past");
+        require(bondToken != address(0), "Invalid bond token");
+        
+        questionId = RealityLib.calculateQuestionId(
+            templateId,
+            question,
+            arbitrator,
+            timeout,
+            openingTs,
+            nonce,
+            msg.sender
+        );
+        
+        require(questions[questionId].timeout == 0, "Question already exists");
+        
+        Question storage q = questions[questionId];
+        q.arbitrator = arbitrator;
+        q.bondToken = bondToken;
         q.timeout = timeout;
         q.openingTs = openingTs;
         q.contentHash = RealityLib.calculateContentHash(templateId, question);
@@ -144,7 +238,15 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
         }
         
         if (bond > 0) {
+            // Transfer bond to contract
             IERC20(q.bondToken).safeTransferFrom(msg.sender, address(this), bond);
+            
+            // Calculate and transfer fee to fee recipient
+            (uint256 fee,) = feeOn(bond);
+            if (fee > 0) {
+                IERC20(q.bondToken).safeTransferFrom(msg.sender, feeRecipient, fee);
+                emit LogFeeCharged(questionId, msg.sender, q.bondToken, bond, fee);
+            }
         }
         
         if (q.bestAnswerer != address(0) && q.bestAnswer != answer) {
@@ -183,7 +285,15 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
         require(c.answerHash == bytes32(0), "Already committed");
         
         if (q.bondToken != address(0) && bond > 0) {
+            // Transfer bond to contract
             IERC20(q.bondToken).safeTransferFrom(msg.sender, address(this), bond);
+            
+            // Calculate and transfer fee to fee recipient
+            (uint256 fee,) = feeOn(bond);
+            if (fee > 0) {
+                IERC20(q.bondToken).safeTransferFrom(msg.sender, feeRecipient, fee);
+                emit LogFeeCharged(questionId, msg.sender, q.bondToken, bond, fee);
+            }
         }
         
         c.answerHash = answerHash;

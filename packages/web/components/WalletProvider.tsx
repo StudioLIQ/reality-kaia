@@ -2,9 +2,10 @@
 
 import '@rainbow-me/rainbowkit/styles.css'
 import { getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit'
-import { WagmiProvider, useChainId, useSwitchChain } from 'wagmi'
+import { WagmiProvider, useChainId, useSwitchChain, useAccount } from 'wagmi'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
-import { kaiaMainnet, kaiaTestnet, CHAIN_LABEL } from '@/lib/viem'
+import { kaiaMainnet, kaiaTestnet } from '@/lib/viem'
+import { networkStatus, chainLabel, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
 import { ReactNode } from 'react'
 
 const queryClient = new QueryClient()
@@ -33,24 +34,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
 function NetworkBadge() {
   const chainId = useChainId()
+  const { isConnected, address } = useAccount()
   const { switchChain } = useSwitchChain()
   
-  const isCorrectNetwork = chainId === 8217 || chainId === 1001
-  const networkLabel = CHAIN_LABEL(chainId)
-  const networkColor = chainId === 8217 ? 'bg-blue-500' : chainId === 1001 ? 'bg-gray-500' : 'bg-red-500'
+  const status = networkStatus(isConnected, chainId)
+  const label = chainLabel(chainId)
+  
+  const statusColor = {
+    'NOT_CONNECTED': 'bg-gray-500',
+    'WRONG_NETWORK': 'bg-red-500', 
+    'MAINNET': 'bg-blue-500',
+    'TESTNET': 'bg-amber-500'
+  }[status]
+  
+  const formatAddress = (addr: string) => 
+    `${addr.slice(0, 6)}...${addr.slice(-4)}`
   
   return (
     <div className="fixed top-4 left-4 z-50">
-      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-white text-sm font-medium ${networkColor} shadow-lg`}>
+      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-white text-sm font-medium ${statusColor} shadow-lg`}>
         <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-        <span>{networkLabel}</span>
-        {!isCorrectNetwork && (
-          <button
-            onClick={() => switchChain({ chainId: 8217 })}
-            className="ml-2 px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded-md text-xs"
-          >
-            Switch
-          </button>
+        <span>{label}</span>
+        {address && isConnected && (
+          <span className="text-xs opacity-80">{formatAddress(address)}</span>
+        )}
+        {status === 'WRONG_NETWORK' && (
+          <div className="flex gap-1">
+            <button
+              onClick={() => switchChain({ chainId: KAIA_MAINNET_ID })}
+              className="ml-2 px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded-md text-xs"
+            >
+              Mainnet
+            </button>
+            <button
+              onClick={() => switchChain({ chainId: KAIA_TESTNET_ID })}
+              className="ml-2 px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded-md text-xs"
+            >
+              Testnet
+            </button>
+          </div>
         )}
       </div>
     </div>

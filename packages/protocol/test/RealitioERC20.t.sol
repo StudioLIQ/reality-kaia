@@ -2,9 +2,9 @@
 pragma solidity ^0.8.25;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {RealitioERC20} from "../src/oracles/Reality/RealitioERC20.sol";
-import {ArbitratorSimple} from "../src/oracles/Reality/ArbitratorSimple.sol";
-import {RealityLib} from "../src/oracles/Reality/RealityLib.sol";
+import {RealitioERC20} from "../src/RealitioERC20.sol";
+import {ArbitratorSimple} from "../src/ArbitratorSimple.sol";
+import {RealityLib} from "../src/RealityLib.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockToken is ERC20 {
@@ -35,7 +35,10 @@ contract RealitioERC20Test is Test {
     string public constant QUESTION = "Will ETH > $3000?";
     
     function setUp() public {
-        realitio = new RealitioERC20();
+        // Deploy with fee configuration
+        address feeRecipient = makeAddr("feeRecipient");
+        uint16 feeBps = 25; // 0.25%
+        realitio = new RealitioERC20(feeRecipient, feeBps);
         
         address[] memory signers = new address[](1);
         signers[0] = arbSigner;

@@ -1,7 +1,8 @@
 import { createPublicClient, createWalletClient, custom, http } from 'viem'
+import { KAIA_MAINNET_ID, KAIA_TESTNET_ID } from './chain'
 
 export const kaiaMainnet = {
-  id: 8217,
+  id: KAIA_MAINNET_ID,
   name: 'Kaia',
   network: 'kaia',
   nativeCurrency: {
@@ -10,8 +11,8 @@ export const kaiaMainnet = {
     symbol: 'KAIA',
   },
   rpcUrls: {
-    default: { http: ['https://public-en.node.kaia.io'] },
-    public: { http: ['https://public-en.node.kaia.io'] },
+    default: { http: [process.env.NEXT_PUBLIC_RPC_MAINNET || 'https://public-en.node.kaia.io'] },
+    public: { http: [process.env.NEXT_PUBLIC_RPC_MAINNET || 'https://public-en.node.kaia.io'] },
   },
   blockExplorers: {
     default: { name: 'KaiaScope', url: 'https://kaiascan.io' },
@@ -19,7 +20,7 @@ export const kaiaMainnet = {
 } as const
 
 export const kaiaTestnet = {
-  id: 1001,
+  id: KAIA_TESTNET_ID,
   name: 'Kairos',
   network: 'kairos',
   nativeCurrency: {
@@ -28,8 +29,8 @@ export const kaiaTestnet = {
     symbol: 'KAIA',
   },
   rpcUrls: {
-    default: { http: ['https://public-en-kairos.node.kaia.io'] },
-    public: { http: ['https://public-en-kairos.node.kaia.io'] },
+    default: { http: [process.env.NEXT_PUBLIC_RPC_TESTNET || 'https://public-en-kairos.node.kaia.io'] },
+    public: { http: [process.env.NEXT_PUBLIC_RPC_TESTNET || 'https://public-en-kairos.node.kaia.io'] },
   },
   blockExplorers: {
     default: { name: 'KaiaScope', url: 'https://kairos.kaiascan.io' },
@@ -37,23 +38,23 @@ export const kaiaTestnet = {
   testnet: true,
 } as const
 
-export const MAINNET_CHAIN_ID = 8217
-export const TESTNET_CHAIN_ID = 1001
+export const MAINNET_CHAIN_ID = KAIA_MAINNET_ID
+export const TESTNET_CHAIN_ID = KAIA_TESTNET_ID
 
 export const USDT_MAINNET = '0xd077a400968890eacc75cdc901f0356c943e4fdb' as const
 export const WKAIA_MAINNET = '0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432' as const
 export const WKAIA_TESTNET = '0x043c471bEe060e00A56CcD02c0Ca286808a5A436' as const
 
 export const CHAINS = {
-  8217: kaiaMainnet,
-  1001: kaiaTestnet,
+  [KAIA_MAINNET_ID]: kaiaMainnet,
+  [KAIA_TESTNET_ID]: kaiaTestnet,
 } as const
 
 export const CHAIN_LABEL = (id: number): string => {
   switch (id) {
-    case 8217:
+    case KAIA_MAINNET_ID:
       return 'Mainnet'
-    case 1001:
+    case KAIA_TESTNET_ID:
       return 'Testnet'
     default:
       return `Chain ${id}`

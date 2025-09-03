@@ -304,3 +304,53 @@ export async function getDeployedAddresses(chainId: number): Promise<{
     return null
   }
 }
+
+export async function resolveBondTokensWithStatus(
+  client: any, 
+  chainId: number, 
+  deployments: any, 
+  realityAddr: `0x${string}`
+) {
+  const base = chainId === 8217
+    ? [
+        {label:'USDT',  address: deployments.USDT as `0x${string}`,  symbol:'USDT',  decimals:6},
+        {label:'WKAIA', address: deployments.WKAIA as `0x${string}`, symbol:'WKAIA', decimals:18}
+      ]
+    : [
+        {label:'USDT',  address: (deployments.USDT ?? deployments.MockUSDT) as `0x${string}`, symbol:'USDT', decimals:6},
+        {label:'WKAIA', address: deployments.WKAIA as `0x${string}`, symbol:'WKAIA', decimals:18}
+      ];
+
+  const abiAllowed = [
+    { name:'allowedBondToken', type:'function', stateMutability:'view', inputs:[{name:'',type:'address'}], outputs:[{type:'bool'}] },
+    { name:'isAllowedBondToken', type:'function', stateMutability:'view', inputs:[{name:'token',type:'address'}], outputs:[{type:'bool'}] },
+  ];
+
+  const out = [];
+  for (const t of base) {
+    if (!t.address) continue; // skip if address is missing
+    
+    let active = true;
+    try {
+      active = await client.readContract({ 
+        address: realityAddr, 
+        abi: [abiAllowed[0]], 
+        functionName:'allowedBondToken', 
+        args:[t.address] 
+      });
+    } catch(_) {
+      try {
+        active = await client.readContract({ 
+          address: realityAddr, 
+          abi: [abiAllowed[1]], 
+          functionName:'isAllowedBondToken', 
+          args:[t.address] 
+        });
+      } catch { 
+        active = true; // default to active if no check method exists
+      }
+    }
+    out.push({...t, active});
+  }
+  return out;
+}
