@@ -1,18 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAccount, usePublicClient, useChainId } from 'wagmi'
-import { formatEther, parseEventLogs } from 'viem'
+import { formatEther } from 'viem'
 import { REALITIO_ABI, getDeployedAddresses } from '@/lib/contracts'
 import Link from 'next/link'
-import NetworkChips from '@/components/NetworkChips'
+import QuestionFilters, { type QuestionRow } from '@/components/QuestionFilters'
 import StatCard from '@/components/StatCard'
 import { DataTable, Th, Td, TRow } from '@/components/DataTable'
+import { deriveStatus, computeDeadline } from '@/lib/status'
 
 export default function Home() {
-  const [questions, setQuestions] = useState<any[]>([])
+  const [questions, setQuestions] = useState<QuestionRow[]>([])
+  const [filteredQuestions, setFilteredQuestions] = useState<QuestionRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [networkFilter, setNetworkFilter] = useState<number | 'all'>('all')
   const publicClient = usePublicClient()
   const chainId = useChainId()
   const { address } = useAccount()
@@ -41,22 +42,56 @@ export default function Home() {
 
         const questionPromises = logs.map(async (log: any) => {
           const questionId = log.args.questionId
-          const question = await publicClient.readContract({
+          const questionData = await publicClient.readContract({
             address: addresses.realitioERC20 as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'getQuestion',
             args: [questionId],
           })
 
+          // Parse the tuple response
+          const [
+            contentHash,
+            arbitrator,
+            openingTsContract,
+            timeoutContract,
+            finalizeTs,
+            isPendingArbitration,
+            bountyRaw,
+            bestAnswer,
+            historyHash,
+            bondTokenAddr
+          ] = questionData as any
+
+          // Determine token symbol based on bond token address
+          let bondTokenSymbol: "USDT" | "WKAIA" | undefined
+          const bondToken = (bondTokenAddr || log.args.bondToken || '0x0000000000000000000000000000000000000000') as `0x${string}`
+          if (bondToken === '0x0000000000000000000000000000000000000000') {
+            bondTokenSymbol = "WKAIA"
+          } else if (bondToken.toLowerCase().includes('ceaa')) {
+            bondTokenSymbol = "USDT"
+          }
+
           return {
             id: questionId,
             text: log.args.question,
+            question: log.args.question,
             templateId: log.args.templateId,
-            timeout: log.args.timeout,
-            openingTs: log.args.openingTs,
+            timeout: log.args.timeout || timeoutContract,
+            timeoutSec: log.args.timeout || timeoutContract,
+            openingTs: log.args.openingTs || openingTsContract,
             createdTs: log.args.createdTs,
-            ...question,
-          }
+            createdAt: log.args.createdTs,
+            asker: log.args.user as `0x${string}`,
+            user: log.args.user as `0x${string}`,
+            bondToken: bondToken,
+            bondTokenSymbol,
+            bestBond: bountyRaw as bigint,
+            currentBondRaw: bountyRaw as bigint,
+            bestAnswer: bestAnswer as string,
+            finalized: finalizeTs > 0,
+            isPendingArbitration: isPendingArbitration as boolean,
+          } as QuestionRow
         })
 
         const questionsData = await Promise.all(questionPromises)
@@ -71,6 +106,19 @@ export default function Home() {
     loadQuestions()
   }, [publicClient, chainId])
 
+  // Calculate stats based on filtered questions
+  const stats = useMemo(() => {
+    const nowSec = Math.floor(Date.now() / 1000)
+    const openQuestions = filteredQuestions.filter(q => !q.finalized).length
+    const totalQuestions = filteredQuestions.length
+    const totalBondValue = filteredQuestions.reduce((acc, q) => {
+      const bond = q.bestBond || q.currentBondRaw
+      return acc + (bond ? Number(formatEther(bond)) : 0)
+    }, 0)
+    
+    return { openQuestions, totalQuestions, totalBondValue }
+  }, [filteredQuestions])
+
   if (loading) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8">
@@ -84,34 +132,29 @@ export default function Home() {
     )
   }
 
-  // Calculate stats
-  const openQuestions = questions.filter(q => !q.finalized).length
-  const totalQuestions = questions.length
-  const totalBondValue = questions.reduce((acc, q) => acc + (q.bestBond ? Number(formatEther(q.bestBond)) : 0), 0)
+  const nowSec = Math.floor(Date.now() / 1000)
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
-      {/* Filter row */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <NetworkChips value={networkFilter} onChange={setNetworkFilter} />
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-bold text-white">Dashboard</h2>
+        <p className="mt-1 text-sm text-white/60">Browse and answer oracle questions</p>
       </div>
+
+      {/* Filters */}
+      <QuestionFilters items={questions} onChange={setFilteredQuestions} />
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <StatCard title="Total Questions" value={totalQuestions.toString()} trend="up" />
-        <StatCard title="Open Questions" value={openQuestions.toString()} meta={<span>Active now</span>} />
-        <StatCard title="Total Bonds" value={`${totalBondValue.toFixed(2)}`} meta={<span>All tokens</span>} />
-      </div>
-
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-white">Recent Questions</h2>
-        <p className="mt-1 text-sm text-white/60">Browse and answer oracle questions</p>
+        <StatCard title="Total Questions" value={stats.totalQuestions.toString()} trend="up" />
+        <StatCard title="Open Questions" value={stats.openQuestions.toString()} meta={<span>Active now</span>} />
+        <StatCard title="Total Bonds" value={`${stats.totalBondValue.toFixed(2)}`} meta={<span>All tokens</span>} />
       </div>
         
-      {questions.length === 0 ? (
+      {filteredQuestions.length === 0 ? (
         <div className="rounded-2xl border border-white/10 bg-white/5 p-8">
-          <p className="text-white/60 text-center">No questions yet. Be the first to create one!</p>
+          <p className="text-white/60 text-center">No questions match your filters.</p>
           <div className="mt-4 text-center">
             <Link 
               href="/create" 
@@ -127,49 +170,59 @@ export default function Home() {
             <tr>
               <Th>Question</Th>
               <Th>Status</Th>
-              <Th>Bond Token</Th>
-              <Th align="right">Best Bond</Th>
-              <Th align="center">Timeout</Th>
+              <Th>Token</Th>
+              <Th align="right">Current Bond</Th>
+              <Th align="center">Deadline</Th>
               <Th align="center">Action</Th>
             </tr>
           </thead>
           <tbody>
-            {questions.map((q) => (
-              <TRow key={q.id}>
-                <Td>
-                  <div className="max-w-xs">
-                    <p className="text-white font-medium truncate">{q.text}</p>
-                    <p className="text-xs text-white/40 mt-1">ID: {q.id.slice(0, 10)}...</p>
-                  </div>
-                </Td>
-                <Td>
-                  <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                    q.finalized 
-                      ? 'bg-white/10 text-white/60' 
-                      : 'bg-emerald-400/10 text-emerald-400 border border-emerald-400/30'
-                  }`}>
-                    {q.finalized ? 'Finalized' : 'Open'}
-                  </span>
-                </Td>
-                <Td>
-                  <span className="text-white/80">{q.bondToken === '0x0000000000000000000000000000000000000000' ? 'Native' : 'ERC20'}</span>
-                </Td>
-                <Td align="right" className="font-mono text-white/80">
-                  {q.bestBond ? formatEther(q.bestBond) : '0'}
-                </Td>
-                <Td align="center" className="text-white/60">
-                  {q.timeout}s
-                </Td>
-                <Td align="center">
-                  <Link 
-                    href={`/q/${q.id}`}
-                    className="inline-flex items-center px-3 py-1 rounded-lg border border-white/10 hover:bg-white/5 text-white/80 text-xs font-medium transition-colors"
-                  >
-                    View
-                  </Link>
-                </Td>
-              </TRow>
-            ))}
+            {filteredQuestions.map((q) => {
+              const status = deriveStatus(q, nowSec)
+              const deadline = computeDeadline(q)
+              const statusColors = {
+                SCHEDULED: 'bg-blue-400/10 text-blue-400 border-blue-400/30',
+                OPEN: 'bg-emerald-400/10 text-emerald-400 border-emerald-400/30',
+                ANSWERED: 'bg-amber-400/10 text-amber-400 border-amber-400/30',
+                FINALIZED: 'bg-white/10 text-white/60',
+                DISPUTED: 'bg-red-400/10 text-red-400 border-red-400/30'
+              }
+              
+              return (
+                <TRow key={q.id}>
+                  <Td>
+                    <div className="max-w-xs">
+                      <p className="text-white font-medium truncate">{q.text || q.question}</p>
+                      <p className="text-xs text-white/40 mt-1">ID: {q.id.slice(0, 10)}...</p>
+                    </div>
+                  </Td>
+                  <Td>
+                    <span className={`inline-flex px-2 py-1 text-xs rounded-full border ${statusColors[status]}`}>
+                      {status.charAt(0) + status.slice(1).toLowerCase()}
+                    </span>
+                  </Td>
+                  <Td>
+                    <span className="text-white/80 text-sm">
+                      {q.bondTokenSymbol || (q.bondToken === '0x0000000000000000000000000000000000000000' ? 'WKAIA' : 'ERC20')}
+                    </span>
+                  </Td>
+                  <Td align="right" className="font-mono text-white/80 text-sm">
+                    {q.bestBond || q.currentBondRaw ? formatEther(q.bestBond || q.currentBondRaw || 0n) : '0'}
+                  </Td>
+                  <Td align="center" className="text-white/60 text-sm">
+                    {deadline ? new Date(deadline * 1000).toLocaleDateString() : '-'}
+                  </Td>
+                  <Td align="center">
+                    <Link 
+                      href={`/q/${q.id}`}
+                      className="inline-flex items-center px-3 py-1 rounded-lg border border-white/10 hover:bg-white/5 text-white/80 text-xs font-medium transition-colors"
+                    >
+                      View
+                    </Link>
+                  </Td>
+                </TRow>
+              )
+            })}
           </tbody>
         </DataTable>
       )}
