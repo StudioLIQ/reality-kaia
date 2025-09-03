@@ -1,7 +1,4 @@
 import { createPublicClient, createWalletClient, custom, http } from 'viem'
-import { injected } from '@wagmi/connectors'
-import { createConfig } from '@wagmi/core'
-import { walletConnect } from '@wagmi/connectors'
 
 export const kaiaMainnet = {
   id: 8217,
@@ -81,38 +78,3 @@ export function getWalletClient(chainId: number) {
   })
 }
 
-export function getWagmiConfig(projectId?: string) {
-  const connectors = [
-    injected({
-      target: {
-        id: 'kaiawallet',
-        name: 'KaiaWallet',
-        provider: typeof window !== 'undefined' ? window.ethereum : undefined,
-      },
-    }),
-  ]
-
-  if (projectId) {
-    connectors.push(
-      walletConnect({
-        projectId,
-        metadata: {
-          name: 'RealitioERC20',
-          description: 'Oracle system for KAIA chain',
-          url: 'https://realitio-kaia.app',
-          icons: [],
-        },
-        showQrModal: true,
-      })
-    )
-  }
-
-  return createConfig({
-    chains: [kaiaMainnet, kaiaTestnet],
-    connectors,
-    transports: {
-      [kaiaMainnet.id]: http(),
-      [kaiaTestnet.id]: http(),
-    },
-  })
-}

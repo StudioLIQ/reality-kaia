@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
-import { formatEther, parseEther, keccak256, toBytes, encodeAbiParameters, parseAbiParameters } from 'viem'
+import { formatEther, parseEther, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
 import { REALITIO_ABI, ERC20_ABI, getDeployedAddresses, resolveBondTokens, getDeployments, type BondToken } from '@/lib/contracts'
 import { CHAIN_LABEL } from '@/lib/viem'
 
@@ -31,6 +31,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
   })
   
   const [bondTokenInfo, setBondTokenInfo] = useState<BondToken | null>(null)
+  const [feeInfo, setFeeInfo] = useState<{ feeBps: number; feeRecipient: string } | null>(null)
 
   useEffect(() => {
     loadQuestion()
@@ -68,11 +69,19 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
       
       setQuestion(questionInfo)
       
-      // Get bond token info
+      // Get bond token info and fee info
       const deployments = await getDeployments(chainId)
       const tokens = resolveBondTokens(chainId, deployments)
       const token = tokens.find(t => t.address.toLowerCase() === questionInfo.bondToken?.toLowerCase())
       setBondTokenInfo(token || null)
+      
+      // Load fee info
+      if (deployments?.feeBps && deployments?.feeRecipient) {
+        setFeeInfo({
+          feeBps: deployments.feeBps,
+          feeRecipient: deployments.feeRecipient
+        })
+      }
     } catch (err) {
       console.error('Error loading question:', err)
     } finally {
@@ -104,11 +113,8 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
       
       if (answerForm.isCommit) {
         // Submit commitment
-        const answerBytes = encodeAbiParameters(
-          parseAbiParameters('bytes32'),
-          [toBytes(answerForm.answer, { size: 32 })]
-        )
-        const nonceBytes = keccak256(toBytes(answerForm.nonce))
+        const answerBytes = pad(toHex(BigInt(answerForm.answer)), { size: 32 })
+        const nonceBytes = keccak256(toHex(answerForm.nonce))
         const answerHash = keccak256(
           encodeAbiParameters(
             parseAbiParameters('bytes32, bytes32'),
@@ -124,10 +130,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
         })
       } else {
         // Submit answer directly
-        const answerBytes = encodeAbiParameters(
-          parseAbiParameters('bytes32'),
-          [toBytes(answerForm.answer, { size: 32 })]
-        )
+        const answerBytes = pad(toHex(BigInt(answerForm.answer)), { size: 32 })
         
         if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
           await walletClient.writeContract({
@@ -166,11 +169,8 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
       const addresses = await getDeployedAddresses(chainId)
       if (!addresses) throw new Error('Contract addresses not found')
       
-      const answerBytes = encodeAbiParameters(
-        parseAbiParameters('bytes32'),
-        [toBytes(revealForm.answer, { size: 32 })]
-      )
-      const nonceBytes = keccak256(toBytes(revealForm.nonce))
+      const answerBytes = pad(toHex(BigInt(revealForm.answer)), { size: 32 })
+      const nonceBytes = keccak256(toHex(revealForm.nonce))
       
       await walletClient.writeContract({
         address: addresses.realitioERC20 as `0x${string}`,
@@ -235,7 +235,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
     Date.now() / 1000 > Number(question.lastAnswerTs) + Number(question.timeout) &&
     !question.finalized
 
-  const minBond = question.bestBond > 0 ? BigInt(question.bestBond) * 2n : 1n
+  const minBond = question.bestBond > 0 ? BigInt(question.bestBond) * BigInt(2) : BigInt(1)
 
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -325,6 +325,14 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                         className="mt-1 block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
                         placeholder={formatEther(minBond)}
                       />
+                      <p className="mt-1 text-sm text-gray-500">
+                        Minimum: {formatEther(minBond)} {bondTokenInfo?.symbol || 'tokens'}
+                      </p>
+                      {feeInfo && (
+                        <p className="mt-1 text-sm text-orange-600">
+                          + {(feeInfo.feeBps / 100).toFixed(2)}% fee will be charged on top
+                        </p>
+                      )}
                     </div>
                     
                     <div className="flex items-center">

@@ -146,6 +146,16 @@ export const ERC20_ABI = [
     "type": "function"
   },
   {
+    "inputs": [
+      { "internalType": "address", "name": "owner", "type": "address" },
+      { "internalType": "address", "name": "spender", "type": "address" }
+    ],
+    "name": "allowance",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [{ "internalType": "address", "name": "account", "type": "address" }],
     "name": "balanceOf",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
@@ -171,6 +181,14 @@ export const ERC20_ABI = [
 export const REALITIO_ERC20_ABI = [
   {
     "inputs": [
+      { "internalType": "address", "name": "_feeRecipient", "type": "address" },
+      { "internalType": "uint16", "name": "_feeBps", "type": "uint16" }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
       { "internalType": "address", "name": "bondToken", "type": "address" },
       { "internalType": "uint32", "name": "templateId", "type": "uint32" },
       { "internalType": "string", "name": "question", "type": "string" },
@@ -182,6 +200,33 @@ export const REALITIO_ERC20_ABI = [
     "name": "askQuestionERC20",
     "outputs": [{ "internalType": "bytes32", "name": "questionId", "type": "bytes32" }],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "amount", "type": "uint256" }],
+    "name": "feeOn",
+    "outputs": [
+      { "internalType": "uint256", "name": "fee", "type": "uint256" },
+      { "internalType": "uint256", "name": "total", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "feeInfo",
+    "outputs": [
+      { "internalType": "uint16", "name": "", "type": "uint16" },
+      { "internalType": "address", "name": "", "type": "address" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "bytes32", "name": "questionId", "type": "bytes32" }],
+    "name": "bondTokenOf",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
     "type": "function"
   },
   ...REALITIO_ABI.slice(1)
@@ -239,6 +284,12 @@ export async function getDeployments(chainId: number): Promise<any | null> {
   } catch {
     return null
   }
+}
+
+export function calculateFee(bondAmount: bigint, feeBps: number = 25): { fee: bigint; total: bigint } {
+  const fee = (bondAmount * BigInt(feeBps)) / BigInt(10000)
+  const total = bondAmount + fee
+  return { fee, total }
 }
 
 export async function getDeployedAddresses(chainId: number): Promise<{

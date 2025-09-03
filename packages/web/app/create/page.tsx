@@ -9,6 +9,7 @@ import {
   getDeployedAddresses, 
   getDeployments,
   resolveBondTokens,
+  calculateFee,
   type BondToken
 } from '@/lib/contracts'
 import { USDT_MAINNET, type Addr } from '@/lib/viem'
@@ -42,12 +43,21 @@ export default function CreateQuestion() {
   const [error, setError] = useState('')
   const [allowance, setAllowance] = useState<bigint>(0n)
   const [checkingAllowance, setCheckingAllowance] = useState(false)
+  const [feeInfo, setFeeInfo] = useState<{ feeBps: number; feeRecipient: string } | null>(null)
 
   useEffect(() => {
     async function loadTokens() {
       const deployments = await getDeployments(chainId)
       const tokens = resolveBondTokens(chainId, deployments)
       setAvailableTokens(tokens)
+      
+      // Load fee info from deployments
+      if (deployments?.feeBps && deployments?.feeRecipient) {
+        setFeeInfo({
+          feeBps: deployments.feeBps,
+          feeRecipient: deployments.feeRecipient
+        })
+      }
       
       if (tokens.length > 0) {
         const usdtToken = tokens.find(t => t.label === 'USDT')
@@ -71,9 +81,9 @@ export default function CreateQuestion() {
           abi: ERC20_ABI,
           functionName: 'allowance',
           args: [address, addresses.realitioERC20 as Addr],
-        }) as bigint
+        })
         
-        setAllowance(allowanceValue)
+        setAllowance(allowanceValue as bigint)
       } catch (err) {
         console.error('Error checking allowance:', err)
       } finally {
@@ -97,7 +107,10 @@ export default function CreateQuestion() {
       const selectedToken = availableTokens.find(t => t.address === bondToken)
       if (!selectedToken) throw new Error('Token not found')
       
-      const amount = parseUnits('1000000', selectedToken.decimals)
+      // Calculate total amount with fee
+      const bondAmount = parseUnits('1000000', selectedToken.decimals)
+      const { total } = calculateFee(bondAmount, feeInfo?.feeBps || 25)
+      const amount = total
       
       await walletClient.writeContract({
         address: bondToken,
@@ -131,7 +144,8 @@ export default function CreateQuestion() {
         throw new Error('Contract addresses not found')
       }
 
-      const nonce = keccak256(toBytes(Date.now().toString() + Math.random().toString()))
+      const randomValue = crypto.getRandomValues(new Uint8Array(32))
+      const nonce = keccak256(randomValue)
       
       const arbitratorAddress = formData.arbitrator || addresses.arbitratorSimple
       const openingTs = formData.openingTs === '0' ? Math.floor(Date.now() / 1000) : parseInt(formData.openingTs)
@@ -186,7 +200,12 @@ export default function CreateQuestion() {
                     </option>
                   ))}
                 </select>
-                {bondToken && allowance === 0n && (
+                {bondToken && feeInfo && (
+                  <p className="mt-2 text-sm text-gray-500">
+                    Fee: {(feeInfo.feeBps / 100).toFixed(2)}% (paid to {feeInfo.feeRecipient.slice(0, 6)}...{feeInfo.feeRecipient.slice(-4)})
+                  </p>
+                )}
+                {bondToken && allowance === BigInt(0) && (
                   <button
                     type="button"
                     onClick={handleApprove}
@@ -289,7 +308,7 @@ export default function CreateQuestion() {
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={loading || !address || !bondToken || allowance === 0n}
+                  disabled={loading || !address || !bondToken || allowance === BigInt(0)}
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                 >
                   {loading ? 'Creating...' : 'Create Question'}

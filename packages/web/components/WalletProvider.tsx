@@ -1,46 +1,27 @@
 'use client'
 
 import '@rainbow-me/rainbowkit/styles.css'
-import { RainbowKitProvider, connectorsForWallets } from '@rainbow-me/rainbowkit'
+import { getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit'
 import { WagmiProvider, useChainId, useSwitchChain } from 'wagmi'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
-import { kaiaMainnet, kaiaTestnet, getWagmiConfig, CHAIN_LABEL } from '@/lib/viem'
-import { injectedWallet, walletConnectWallet } from '@rainbow-me/rainbowkit/wallets'
-import { ReactNode, useMemo } from 'react'
+import { kaiaMainnet, kaiaTestnet, CHAIN_LABEL } from '@/lib/viem'
+import { ReactNode } from 'react'
 
 const queryClient = new QueryClient()
 
+const config = getDefaultConfig({
+  appName: 'RealitioERC20',
+  projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID || 'YOUR_PROJECT_ID',
+  chains: [kaiaMainnet, kaiaTestnet],
+  ssr: true,
+})
+
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID
-  
-  const connectors = useMemo(() => {
-    const wallets = [
-      {
-        groupName: 'Recommended',
-        wallets: [
-          injectedWallet,
-          ...(projectId ? [walletConnectWallet] : []),
-        ],
-      },
-    ]
-    return connectorsForWallets(wallets, {
-      appName: 'RealitioERC20',
-      projectId: projectId || 'YOUR_PROJECT_ID',
-    })
-  }, [projectId])
-
-  const config = useMemo(() => getWagmiConfig(projectId), [projectId])
-
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
-          chains={[kaiaMainnet, kaiaTestnet]}
           initialChain={kaiaMainnet}
-          appInfo={{
-            appName: 'RealitioERC20',
-            learnMoreUrl: 'https://kaia.io',
-          }}
         >
           <NetworkBadge />
           {children}
