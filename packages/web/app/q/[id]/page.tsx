@@ -11,6 +11,9 @@ import { PaymentModeSelector, type PaymentMode } from '@/components/PaymentModeS
 import { usePermit2, usePermit2612 } from '@/hooks/usePermit2'
 import { quoteFee } from '@/lib/fees'
 import FeeNotice from '@/components/FeeNotice'
+import DisclaimerBadge from '@/components/DisclaimerBadge'
+import DisclaimerGate from '@/components/DisclaimerGate'
+import { TEMPLATES } from '@/lib/templates'
 
 export default function QuestionDetail({ params }: { params: { id: string } }) {
   const questionId = params.id as `0x${string}`
@@ -368,6 +371,18 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
               </div>
               
               <div>
+                <p className="text-sm text-gray-500">Template</p>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-600">
+                    Template info not available
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    (Template ID is not stored on-chain)
+                  </span>
+                </div>
+              </div>
+              
+              <div>
                 <p className="text-sm text-gray-500">Bond Token</p>
                 <p className="font-medium">
                   {bondTokenInfo ? `${bondTokenInfo.label} (${bondTokenInfo.symbol})` : 'Native KAIA'}
@@ -490,13 +505,18 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                       />
                     )}
                     
-                    <button
-                      onClick={handleSubmitAnswer}
-                      disabled={actionLoading || !address || gated}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {actionLoading ? 'Submitting...' : 'Submit Answer'}
-                    </button>
+                    <DisclaimerGate>
+                      <div className="flex items-center justify-between gap-3">
+                        <DisclaimerBadge compact />
+                        <button
+                          onClick={handleSubmitAnswer}
+                          disabled={actionLoading || !address || gated}
+                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {actionLoading ? 'Submitting...' : 'Submit Answer'}
+                        </button>
+                      </div>
+                    </DisclaimerGate>
                   </div>
                 </div>
                 

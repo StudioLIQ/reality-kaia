@@ -9,21 +9,22 @@ import {
   getDeployedAddresses, 
   resolveBondTokens,
   resolveBondTokensWithStatus,
-  calculateFee,
-  type BondToken
+  calculateFee
 } from '@/lib/contracts'
 import { getDeployments } from '@/lib/deployments.generated'
 import { USDT_MAINNET, type Addr } from '@/lib/viem'
 import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput, fromNow } from '@/lib/time'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
-import { TOKENS_FOR } from '@/lib/tokens'
+import { TOKENS_FOR, type BondToken } from '@/lib/tokens'
 import { quoteFee } from '@/lib/fees'
 import FeeNotice from '@/components/FeeNotice'
+import TemplatePicker from '@/components/TemplatePicker'
+import TokenSelector from '@/components/TokenSelector'
+import DisclaimerBadge from '@/components/DisclaimerBadge'
+import DisclaimerGate from '@/components/DisclaimerGate'
+import { getAllowedTemplates } from '@/lib/templates'
 import { useRouter } from 'next/navigation'
 
-interface BondTokenWithStatus extends BondToken {
-  active: boolean;
-}
 
 export default function CreateQuestion() {
   const router = useRouter()
@@ -32,13 +33,18 @@ export default function CreateQuestion() {
   const publicClient = usePublicClient()
   const chainId = useChainId()
   
+  const templates = getAllowedTemplates(chainId)
+  const deployments = getDeployments(chainId)
+  const availableTokens = TOKENS_FOR(chainId, deployments || {})
+  
+  const [templateId, setTemplateId] = useState<number | undefined>(templates[0]?.id)
   const [formData, setFormData] = useState({
-    templateId: '0',
     question: '',
     arbitrator: '',
   })
-  const [bondToken, setBondToken] = useState<BondTokenWithStatus | null>(null)
-  const [availableTokens, setAvailableTokens] = useState<BondTokenWithStatus[]>([])
+  const [bondToken, setBondToken] = useState<BondToken | undefined>(
+    availableTokens.find(t => t.label === 'USDT') || availableTokens[0]
+  )
   const [timeoutSec, setTimeoutSec] = useState<number>(TIMEOUT_PRESETS[0].seconds)
   const [timeoutUnit, setTimeoutUnit] = useState<'s'|'m'|'h'|'d'>('h')
   const [timeoutInput, setTimeoutInput] = useState<number>(24)
@@ -86,39 +92,15 @@ export default function CreateQuestion() {
     calculateFeeQuote()
   }, [bondAmount, bondToken, publicClient, chainId, feeInfo])
 
+  // Load fee info from deployments
   useEffect(() => {
-    async function loadTokens() {
-      if (!publicClient) return
-      
-      const deployments = await getDeployments(chainId)
-      const addresses = await getDeployedAddresses(chainId)
-      
-      if (!deployments || !addresses) return
-      
-      const tokens = await resolveBondTokensWithStatus(
-        publicClient,
-        chainId,
-        deployments,
-        addresses.realitioERC20 as Addr
-      )
-      
-      setAvailableTokens(tokens)
-      
-      // Load fee info from deployments
-      if (deployments?.feeBps && deployments?.feeRecipient) {
-        setFeeInfo({
-          feeBps: deployments.feeBps,
-          feeRecipient: deployments.feeRecipient
-        })
-      }
-      
-      if (tokens.length > 0) {
-        const usdtToken = tokens.find((t: BondTokenWithStatus) => t.label === 'USDT')
-        setBondToken(usdtToken || tokens[0])
-      }
+    if (deployments?.feeBps && deployments?.feeRecipient) {
+      setFeeInfo({
+        feeBps: deployments.feeBps,
+        feeRecipient: deployments.feeRecipient
+      })
     }
-    loadTokens()
-  }, [chainId, publicClient])
+  }, [deployments])
 
   useEffect(() => {
     async function checkAllowance() {
@@ -190,6 +172,11 @@ export default function CreateQuestion() {
       return
     }
 
+    if (!templateId) {
+      setError('Please select a template')
+      return
+    }
+
     setLoading(true)
     setError('')
 
@@ -211,7 +198,7 @@ export default function CreateQuestion() {
         functionName: 'askQuestionERC20',
         args: [
           bondToken.address,
-          parseInt(formData.templateId),
+          Number(templateId),
           formData.question,
           arbitratorAddress as Addr,
           timeoutSec,
@@ -242,27 +229,17 @@ export default function CreateQuestion() {
             <h2 className="text-2xl font-bold mb-6">Create New Question</h2>
             
             <form onSubmit={handleSubmit} className={`space-y-6 ${gated ? 'pointer-events-none opacity-50' : ''}`}>
-              <div>
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">
                   Bond Token
                 </label>
-                <div className="flex gap-2 mt-2">
-                  {availableTokens.map(t => (
-                    <button
-                      key={t.address}
-                      type="button"
-                      onClick={() => setBondToken(t)}
-                      className={`px-3 py-1 rounded-full border ${bondToken?.address === t.address ? 'border-indigo-400 bg-indigo-400/10' : 'border-gray-300'}`}
-                    >
-                      {t.label}
-                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded ${t.active ? 'bg-green-400/10 text-green-600 border border-green-400/30' : 'bg-gray-100 text-gray-500 border border-gray-300'}`}>
-                        {t.active ? 'Active' : 'Inactive'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                <TokenSelector 
+                  tokens={availableTokens} 
+                  value={bondToken} 
+                  onChange={setBondToken} 
+                />
                 {bondToken && !bondToken.active && (
-                  <p className="mt-2 text-xs text-red-600">This token is not allowed by the oracle. Choose an Active token.</p>
+                  <p className="text-xs text-red-600 mt-1">Selected token is not allowed. Choose an Active token.</p>
                 )}
                 {bondToken && feeInfo && (
                   <p className="mt-2 text-sm text-gray-500">
@@ -282,17 +259,20 @@ export default function CreateQuestion() {
               </div>
 
               <div>
-                <label htmlFor="templateId" className="block text-sm font-medium text-gray-700">
-                  Template ID
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Template
                 </label>
-                <input
-                  type="number"
-                  id="templateId"
-                  value={formData.templateId}
-                  onChange={(e) => setFormData({ ...formData, templateId: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  required
+                <TemplatePicker 
+                  items={templates} 
+                  value={templateId} 
+                  onChange={setTemplateId} 
                 />
+                {!templateId && (
+                  <p className="mt-2 text-sm text-amber-600">Please select a template to continue.</p>
+                )}
+                <p className="mt-3 text-xs text-gray-500">
+                  Only the templates listed above are supported. Need another template? Please contact an admin.
+                </p>
               </div>
 
               <div>
@@ -427,15 +407,18 @@ export default function CreateQuestion() {
                 </div>
               )}
 
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={loading || !address || !bondToken || allowance === BigInt(0) || gated || (bondToken && !bondToken.active)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Creating...' : 'Create Question'}
-                </button>
-              </div>
+              <DisclaimerGate>
+                <div className="flex items-center justify-between gap-3">
+                  <DisclaimerBadge compact />
+                  <button
+                    type="submit"
+                    disabled={loading || !address || !bondToken || !templateId || allowance === BigInt(0) || gated || (bondToken && !bondToken.active)}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Creating...' : 'Create Question'}
+                  </button>
+                </div>
+              </DisclaimerGate>
             </form>
           </div>
         </div>

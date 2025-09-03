@@ -5,6 +5,7 @@ import { useAccount, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEventLogs } from 'viem'
 import { REALITIO_ABI, getDeployedAddresses } from '@/lib/contracts'
 import Link from 'next/link'
+import DisclaimerBadge from '@/components/DisclaimerBadge'
 
 export default function Home() {
   const [questions, setQuestions] = useState<any[]>([])
@@ -80,7 +81,10 @@ export default function Home() {
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
-        <h2 className="text-2xl font-bold mb-6">Recent Questions</h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">Recent Questions</h2>
+          <DisclaimerBadge compact />
+        </div>
         
         {questions.length === 0 ? (
           <div className="bg-white overflow-hidden shadow rounded-lg p-6">
