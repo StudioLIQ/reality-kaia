@@ -1,6 +1,14 @@
 import "@testing-library/jest-dom";
-import { vi } from 'vitest';
+import { vi, afterEach } from 'vitest';
 import React from 'react';
+import { cleanup } from "@testing-library/react";
+import { resetWagmiMocks } from "./mocks/wagmi";
+
+// Cleanup after each test
+afterEach(() => {
+  cleanup();
+  resetWagmiMocks();
+});
 
 // ---- Mock Next.js bits that often break tests
 vi.mock("next/link", () => ({
