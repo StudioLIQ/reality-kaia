@@ -8,8 +8,9 @@ import {RealityLib} from "./RealityLib.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IPermit2} from "./interfaces/IPermit2.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract RealitioERC20 is IReality, ReentrancyGuard {
+contract RealitioERC20 is IReality, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
     using RealityLib for *;
     
@@ -47,10 +48,14 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
     mapping(bytes32 => mapping(address => bytes32)) public answersByAnswerer;
     mapping(bytes32 => mapping(address => uint256)) public bondsByAnswerer;
     
+    // Zapper allowlist
+    mapping(address => bool) public isZapper;
+    
     // Events for fees
     event LogFeeCharged(bytes32 indexed questionId, address indexed payer, address bondToken, uint256 bond, uint256 fee);
+    event ZapperSet(address indexed zapper, bool allowed);
     
-    constructor(address _feeRecipient, uint16 _feeBps, address _permit2) {
+    constructor(address _feeRecipient, uint16 _feeBps, address _permit2) Ownable(msg.sender) {
         require(_feeBps <= 1000, "Fee too high (max 10%)");
         require(_feeRecipient != address(0), "Invalid fee recipient");
         feeBps = _feeBps;
@@ -685,5 +690,92 @@ contract RealitioERC20 is IReality, ReentrancyGuard {
             q.lastAnswerTs,
             q.finalized
         );
+    }
+    
+    /**
+     * @dev Set or unset a zapper address
+     * @param zapper The zapper address to set
+     * @param allowed Whether the zapper is allowed
+     */
+    function setZapper(address zapper, bool allowed) external onlyOwner {
+        isZapper[zapper] = allowed;
+        emit ZapperSet(zapper, allowed);
+    }
+    
+    /**
+     * @dev Submit answer from a zapper on behalf of a user
+     * @param questionId The question ID
+     * @param answer The answer to submit
+     * @param bond The bond amount
+     * @param answerer The user who is the actual answerer
+     */
+    function submitAnswerFromZapper(
+        bytes32 questionId,
+        bytes32 answer,
+        uint256 bond,
+        address answerer
+    ) external nonReentrant questionExists(questionId) notFinalized(questionId) {
+        require(isZapper[msg.sender], "NOT_ZAPPER");
+        Question storage q = questions[questionId];
+        
+        require(block.timestamp >= q.openingTs, "Question not yet open");
+        require(!q.arbitrationPending, "Arbitration pending");
+        
+        uint256 minBond = RealityLib.calculateMinBond(q.bestBond);
+        require(bond >= minBond, "Bond too low");
+        
+        (uint256 fee, ) = feeOn(bond);
+        
+        // Pull funds from zapper (msg.sender)
+        if (q.bondToken != address(0)) {
+            IERC20(q.bondToken).safeTransferFrom(msg.sender, address(this), bond);
+            if (fee > 0) {
+                IERC20(q.bondToken).safeTransferFrom(msg.sender, feeRecipient, fee);
+                emit LogFeeCharged(questionId, answerer, q.bondToken, bond, fee);
+            }
+        }
+        
+        _processAnswerSubmission(questionId, q, answer, bond, answerer);
+    }
+    
+    /**
+     * @dev Submit answer commitment from a zapper on behalf of a user
+     * @param questionId The question ID
+     * @param commitment The commitment hash
+     * @param bond The bond amount
+     * @param committer The user who is the actual committer
+     */
+    function submitAnswerCommitmentFromZapper(
+        bytes32 questionId,
+        bytes32 commitment,
+        uint256 bond,
+        address committer
+    ) external nonReentrant questionExists(questionId) notFinalized(questionId) {
+        require(isZapper[msg.sender], "NOT_ZAPPER");
+        Question storage q = questions[questionId];
+        
+        require(block.timestamp >= q.openingTs, "Question not yet open");
+        require(!q.arbitrationPending, "Arbitration pending");
+        
+        uint256 minBond = RealityLib.calculateMinBond(q.bestBond);
+        require(bond >= minBond, "Bond too low");
+        
+        (uint256 fee, ) = feeOn(bond);
+        
+        // Pull funds from zapper (msg.sender)
+        if (q.bondToken != address(0)) {
+            IERC20(q.bondToken).safeTransferFrom(msg.sender, address(this), bond);
+            if (fee > 0) {
+                IERC20(q.bondToken).safeTransferFrom(msg.sender, feeRecipient, fee);
+                emit LogFeeCharged(questionId, committer, q.bondToken, bond, fee);
+            }
+        }
+        
+        Commitment storage c = commitments[questionId][committer];
+        c.answerHash = commitment;
+        c.bond = bond;
+        c.commitTs = uint64(block.timestamp);
+        
+        emit LogNewCommitment(questionId, commitment, committer, bond, block.timestamp);
     }
 }

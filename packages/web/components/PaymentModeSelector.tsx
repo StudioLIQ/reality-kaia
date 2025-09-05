@@ -4,9 +4,9 @@ import { RadioGroup } from '@headlessui/react'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { useState, useEffect } from 'react'
 import { useContractRead, usePublicClient } from 'wagmi'
-import { formatUnits } from 'viem'
+import { formatUnits, parseUnits } from 'viem'
 
-export type PaymentMode = 'permit2' | 'permit2612' | 'approve'
+export type PaymentMode = 'permit2' | 'permit2612' | 'approve' | 'mixed'
 
 interface PaymentModeOption {
   id: PaymentMode
@@ -22,6 +22,7 @@ interface PaymentModeSelectorProps {
   feeAmount: bigint
   deployments: any
   onModeChange: (mode: PaymentMode) => void
+  onWkaiaAmountChange?: (amount: bigint) => void
 }
 
 export function PaymentModeSelector({ 
@@ -29,9 +30,11 @@ export function PaymentModeSelector({
   bondAmount, 
   feeAmount, 
   deployments,
-  onModeChange 
+  onModeChange,
+  onWkaiaAmountChange 
 }: PaymentModeSelectorProps) {
   const [selectedMode, setSelectedMode] = useState<PaymentMode>('permit2')
+  const [wkaiaAmount, setWkaiaAmount] = useState<bigint>(0n)
   const publicClient = usePublicClient()
   
   // Check if token supports EIP-2612
@@ -64,6 +67,8 @@ export function PaymentModeSelector({
   }, [bondToken, publicClient])
   
   const hasPermit2 = Boolean(deployments?.PERMIT2)
+  const hasZapper = Boolean(deployments?.zapperWKAIA)
+  const isWKAIA = bondToken?.toLowerCase() === deployments?.WKAIA?.toLowerCase()
   
   const paymentModes: PaymentModeOption[] = [
     {
@@ -86,6 +91,13 @@ export function PaymentModeSelector({
       description: 'Approve first, then submit (2 transactions)',
       transactions: 2,
       available: true
+    },
+    {
+      id: 'mixed',
+      name: 'Mixed (WKAIA + KAIA)',
+      description: 'Use WKAIA first, auto-wrap KAIA for remainder',
+      transactions: 1,
+      available: isWKAIA && hasZapper
     }
   ]
   
@@ -179,6 +191,48 @@ export function PaymentModeSelector({
             ))}
           </div>
         </RadioGroup>
+        
+        {selectedMode === 'mixed' && isWKAIA && (
+          <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+            <h4 className="text-sm font-medium text-amber-900 dark:text-amber-100 mb-2">
+              Mixed Payment Configuration
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-amber-700 dark:text-amber-300 mb-1">
+                  WKAIA Amount to Use (max: {formatUnits(total, 18)} WKAIA)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={formatUnits(total, 18)}
+                  placeholder="0.0"
+                  className="w-full px-3 py-2 border border-amber-300 dark:border-amber-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  onChange={(e) => {
+                    const value = e.target.value ? parseFloat(e.target.value) : 0
+                    const wkaiaBigInt = BigInt(Math.floor(value * 1e18))
+                    setWkaiaAmount(wkaiaBigInt > total ? total : wkaiaBigInt)
+                    onWkaiaAmountChange?.(wkaiaBigInt > total ? total : wkaiaBigInt)
+                  }}
+                />
+              </div>
+              <div className="text-sm space-y-1">
+                <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                  <span>WKAIA portion:</span>
+                  <span className="font-mono">{formatUnits(wkaiaAmount, 18)} WKAIA</span>
+                </div>
+                <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                  <span>KAIA to wrap:</span>
+                  <span className="font-mono">{formatUnits(total > wkaiaAmount ? total - wkaiaAmount : 0n, 18)} KAIA</span>
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                The zapper will use your WKAIA first, then automatically wrap native KAIA for the remainder.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

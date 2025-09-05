@@ -61,8 +61,12 @@ contract DeployAll is Script {
         console2.log("ArbitratorSimple deployed at:", address(arbitrator));
         
         // Deploy ZapperWKAIA
-        ZapperWKAIA zapper = new ZapperWKAIA(wkaia, address(realitio));
+        ZapperWKAIA zapper = new ZapperWKAIA(wkaia, address(realitio), permit2);
         console2.log("ZapperWKAIA deployed at:", address(zapper));
+        
+        // Set zapper as allowed in RealitioERC20
+        realitio.setZapper(address(zapper), true);
+        console2.log("ZapperWKAIA set as allowed zapper");
         
         vm.stopBroadcast();
         

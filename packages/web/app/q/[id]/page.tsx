@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEther, parseUnits, formatUnits, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
 import { REALITIO_ABI, ERC20_ABI, resolveBondTokens, type BondToken } from '@/lib/contracts'
@@ -10,13 +10,16 @@ import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
 import { PaymentModeSelector, type PaymentMode } from '@/components/PaymentModeSelector'
 import { usePermit2, usePermit2612 } from '@/hooks/usePermit2'
 import { quoteFee } from '@/lib/fees'
+import { SignatureTransfer } from '@uniswap/permit2-sdk'
 import FeeNotice from '@/components/FeeNotice'
 import DisclaimerBadge from '@/components/DisclaimerBadge'
 import DisclaimerGate from '@/components/DisclaimerGate'
 import { TEMPLATES } from '@/lib/templates'
 
 export default function QuestionDetail({ params }: { params: Promise<{ id: string }> }) {
-  const [questionId, setQuestionId] = useState<`0x${string}` | null>(null)
+  const resolvedParams = use(params)
+  const questionId = resolvedParams.id as `0x${string}`
+  
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
@@ -48,15 +51,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('permit2')
   const [deploymentsState, setDeploymentsState] = useState<any>(null)
   const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
-
-  // Handle async params
-  useEffect(() => {
-    async function getParams() {
-      const { id } = await params
-      setQuestionId(id as `0x${string}`)
-    }
-    getParams()
-  }, [params])
+  const [wkaiaAmount, setWkaiaAmount] = useState<bigint>(0n)
 
   useEffect(() => {
     if (!questionId) return
@@ -203,6 +198,87 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
             functionName: 'submitAnswerCommitmentWithPermit2612',
             args: [questionId, answerHash, bondAmount, bondToken as `0x${string}`, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`],
           })
+        } else if (paymentMode === 'mixed' && addr.zapper) {
+          // Use Mixed (WKAIA + KAIA) payment via Zapper
+          const desiredWkaia = wkaiaAmount > totalAmount ? totalAmount : wkaiaAmount
+          const remainderKaia = totalAmount > desiredWkaia ? totalAmount - desiredWkaia : 0n
+          
+          let permit = null
+          let signature: `0x${string}` = '0x'
+          
+          if (desiredWkaia > 0n) {
+            // Create Permit2 signature for WKAIA portion
+            const nonce = BigInt(Math.floor(Math.random() * 2**48))
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600)
+            permit = {
+              permitted: {
+                token: addr.wkaia!,
+                amount: desiredWkaia
+              },
+              nonce,
+              deadline
+            }
+            const permitData = SignatureTransfer.getPermitData(permit, addr.permit2!, chainId)
+            signature = await walletClient.signTypedData({
+              domain: permitData.domain,
+              types: permitData.types,
+              primaryType: 'PermitTransferFrom',
+              message: permitData.message,
+              account: address
+            })
+          } else {
+            // No WKAIA, create dummy permit
+            permit = {
+              permitted: {
+                token: addr.wkaia || '0x0000000000000000000000000000000000000000',
+                amount: 0n
+              },
+              nonce: 0n,
+              deadline: BigInt(Math.floor(Date.now() / 1000) + 3600)
+            }
+          }
+          
+          // Import ZAPPER_WKAIA_ABI if not imported yet
+          const ZAPPER_WKAIA_ABI = [
+            {
+              "type": "function",
+              "name": "commitMixedWithPermit2",
+              "inputs": [
+                {"name": "qid", "type": "bytes32"},
+                {"name": "commitment", "type": "bytes32"},
+                {"name": "bond", "type": "uint256"},
+                {
+                  "name": "permit",
+                  "type": "tuple",
+                  "components": [
+                    {
+                      "name": "permitted",
+                      "type": "tuple",
+                      "components": [
+                        {"name": "token", "type": "address"},
+                        {"name": "amount", "type": "uint256"}
+                      ]
+                    },
+                    {"name": "nonce", "type": "uint256"},
+                    {"name": "deadline", "type": "uint256"}
+                  ]
+                },
+                {"name": "signature", "type": "bytes"},
+                {"name": "owner", "type": "address"},
+                {"name": "wkaiaMaxFromPermit", "type": "uint256"}
+              ],
+              "outputs": [],
+              "stateMutability": "payable"
+            }
+          ] as const
+          
+          await walletClient.writeContract({
+            address: addr.zapper as `0x${string}`,
+            abi: ZAPPER_WKAIA_ABI,
+            functionName: 'commitMixedWithPermit2',
+            args: [questionId, answerHash, bondAmount, permit, signature, address, desiredWkaia],
+            value: remainderKaia
+          })
         } else {
           // Traditional approve flow
           if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
@@ -240,6 +316,87 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
             abi: REALITIO_ABI,
             functionName: 'submitAnswerWithPermit2612',
             args: [questionId, answerBytes, bondAmount, bondToken as `0x${string}`, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`],
+          })
+        } else if (paymentMode === 'mixed' && addr.zapper) {
+          // Use Mixed (WKAIA + KAIA) payment via Zapper
+          const desiredWkaia = wkaiaAmount > totalAmount ? totalAmount : wkaiaAmount
+          const remainderKaia = totalAmount > desiredWkaia ? totalAmount - desiredWkaia : 0n
+          
+          let permit = null
+          let signature: `0x${string}` = '0x'
+          
+          if (desiredWkaia > 0n) {
+            // Create Permit2 signature for WKAIA portion
+            const nonce = BigInt(Math.floor(Math.random() * 2**48))
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600)
+            permit = {
+              permitted: {
+                token: addr.wkaia!,
+                amount: desiredWkaia
+              },
+              nonce,
+              deadline
+            }
+            const permitData = SignatureTransfer.getPermitData(permit, addr.permit2!, chainId)
+            signature = await walletClient.signTypedData({
+              domain: permitData.domain,
+              types: permitData.types,
+              primaryType: 'PermitTransferFrom',
+              message: permitData.message,
+              account: address
+            })
+          } else {
+            // No WKAIA, create dummy permit
+            permit = {
+              permitted: {
+                token: addr.wkaia || '0x0000000000000000000000000000000000000000',
+                amount: 0n
+              },
+              nonce: 0n,
+              deadline: BigInt(Math.floor(Date.now() / 1000) + 3600)
+            }
+          }
+          
+          // Import ZAPPER_WKAIA_ABI if not imported yet
+          const ZAPPER_WKAIA_ABI = [
+            {
+              "type": "function",
+              "name": "answerMixedWithPermit2",
+              "inputs": [
+                {"name": "qid", "type": "bytes32"},
+                {"name": "answer", "type": "bytes32"},
+                {"name": "bond", "type": "uint256"},
+                {
+                  "name": "permit",
+                  "type": "tuple",
+                  "components": [
+                    {
+                      "name": "permitted",
+                      "type": "tuple",
+                      "components": [
+                        {"name": "token", "type": "address"},
+                        {"name": "amount", "type": "uint256"}
+                      ]
+                    },
+                    {"name": "nonce", "type": "uint256"},
+                    {"name": "deadline", "type": "uint256"}
+                  ]
+                },
+                {"name": "signature", "type": "bytes"},
+                {"name": "owner", "type": "address"},
+                {"name": "wkaiaMaxFromPermit", "type": "uint256"}
+              ],
+              "outputs": [],
+              "stateMutability": "payable"
+            }
+          ] as const
+          
+          await walletClient.writeContract({
+            address: addr.zapper as `0x${string}`,
+            abi: ZAPPER_WKAIA_ABI,
+            functionName: 'answerMixedWithPermit2',
+            args: [questionId, answerBytes, bondAmount, permit, signature, address, desiredWkaia],
+            value: remainderKaia
           })
         } else {
           // Traditional approve flow
@@ -529,6 +686,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
                         feeAmount={feeInfo ? ((bondTokenInfo?.decimals ? parseUnits(answerForm.bond, bondTokenInfo.decimals) : parseEther(answerForm.bond)) * BigInt(feeInfo.feeBps)) / 10000n : 0n}
                         deployments={deployments}
                         onModeChange={setPaymentMode}
+                        onWkaiaAmountChange={setWkaiaAmount}
                       />
                     )}
                     
