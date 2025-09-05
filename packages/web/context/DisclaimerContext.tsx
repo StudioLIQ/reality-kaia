@@ -15,14 +15,21 @@ const LS_KEY = "orakore:disclaimer_ack_v1";
 export function DisclaimerProvider({ children }: { children: ReactNode }) {
   const [isOpen, setOpen] = useState(false);
   const [ack, setAck] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { 
+  useEffect(() => {
+    setMounted(true);
+    // Only access localStorage after mounting on client
     try { 
-      setAck(localStorage.getItem(LS_KEY) === "1"); 
+      const stored = localStorage.getItem(LS_KEY);
+      if (stored === "1") {
+        setAck(true);
+      }
     } catch {} 
   }, []);
   
   const acknowledge = () => { 
+    if (!mounted) return;
     try { 
       localStorage.setItem(LS_KEY, "1"); 
     } catch {} 

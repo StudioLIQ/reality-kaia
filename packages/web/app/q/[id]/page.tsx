@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEther, parseUnits, formatUnits, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
-import { REALITIO_ABI, ERC20_ABI, getDeployedAddresses, resolveBondTokens, type BondToken } from '@/lib/contracts'
-import { getDeployments } from '@/lib/deployments.generated'
+import { REALITIO_ABI, ERC20_ABI, resolveBondTokens, type BondToken } from '@/lib/contracts'
+import { useAddresses } from '@/lib/contracts.client'
 import { CHAIN_LABEL } from '@/lib/viem'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
 import { PaymentModeSelector, type PaymentMode } from '@/components/PaymentModeSelector'
@@ -21,6 +21,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
   const chainId = useChainId()
+  const { addr, deployments, ready: addrReady, loading: addrLoading, error: addrError, feeBps } = useAddresses()
   
   const status = networkStatus(isConnected, chainId)
   const gated = (status === "NOT_CONNECTED" || status === "WRONG_NETWORK")
@@ -45,7 +46,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
   const [bondTokenInfo, setBondTokenInfo] = useState<BondToken | null>(null)
   const [feeInfo, setFeeInfo] = useState<{ feeBps: number; feeRecipient: string } | null>(null)
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('permit2')
-  const [deployments, setDeployments] = useState<any>(null)
+  const [deploymentsState, setDeploymentsState] = useState<any>(null)
   const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
 
   // Handle async params
@@ -68,11 +69,10 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
     if (!publicClient || !questionId) return
     
     try {
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses) return
+      if (!addr.reality) return
 
       const questionData = await publicClient.readContract({
-        address: addresses.realitioERC20 as `0x${string}`,
+        address: addr.reality as `0x${string}`,
         abi: REALITIO_ABI,
         functionName: 'getQuestion',
         args: [questionId],
@@ -95,17 +95,16 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
       setQuestion(questionInfo)
       
       // Get bond token info and fee info
-      const deps = await getDeployments(chainId)
-      setDeployments(deps)
-      const tokens = resolveBondTokens(chainId, deps)
+      setDeploymentsState(deployments)
+      const tokens = resolveBondTokens(chainId, deployments)
       const token = tokens.find(t => t.address.toLowerCase() === questionInfo.bondToken?.toLowerCase())
       setBondTokenInfo(token || null)
       
       // Load fee info
-      if (deps?.feeBps && deps?.feeRecipient) {
+      if (deployments?.feeBps && deployments?.feeRecipient) {
         setFeeInfo({
-          feeBps: deps.feeBps,
-          feeRecipient: deps.feeRecipient
+          feeBps: deployments.feeBps,
+          feeRecipient: deployments.feeRecipient
         })
       }
     } catch (err) {
@@ -118,21 +117,21 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
   // Initialize Permit2 hooks
   const { signPermit2 } = usePermit2({
     bondToken: question?.bondToken as `0x${string}`,
-    realitioAddress: deployments?.realitioERC20 as `0x${string}`,
-    permit2Address: deployments?.PERMIT2 as `0x${string}`,
+    realitioAddress: deploymentsState?.realitioERC20 as `0x${string}`,
+    permit2Address: deploymentsState?.PERMIT2 as `0x${string}`,
     chainId
   })
   
   const { signPermit2612 } = usePermit2612({
     bondToken: question?.bondToken as `0x${string}`,
-    realitioAddress: deployments?.realitioERC20 as `0x${string}`,
+    realitioAddress: deploymentsState?.realitioERC20 as `0x${string}`,
     chainId
   })
   
   // Calculate fee when bond amount changes
   useEffect(() => {
     async function calculateFeeQuote() {
-      if (!bondTokenInfo || !publicClient || !answerForm.bond || !deployments?.realitioERC20) return
+      if (!bondTokenInfo || !publicClient || !answerForm.bond || !deploymentsState?.realitioERC20) return
       
       try {
         const bondRaw = bondTokenInfo?.decimals
@@ -141,7 +140,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
         
         const quote = await quoteFee({
           client: publicClient,
-          reality: deployments.realitioERC20 as `0x${string}`,
+          reality: deploymentsState.realitioERC20 as `0x${string}`,
           bondTokenDecimals: bondTokenInfo?.decimals || 18,
           bondRaw,
           feeBpsFallback: feeInfo?.feeBps || 25
@@ -163,8 +162,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
     setError('')
     
     try {
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses) throw new Error('Contract addresses not found')
+      if (!addr.reality) throw new Error('Contract addresses not found')
       
       const bondAmount = bondTokenInfo?.decimals 
         ? parseUnits(answerForm.bond, bondTokenInfo.decimals)
@@ -186,11 +184,11 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
           )
         )
         
-        if (paymentMode === 'permit2' && deployments?.PERMIT2) {
+        if (paymentMode === 'permit2' && deploymentsState?.PERMIT2) {
           // Use Permit2
           const { permit, signature } = await signPermit2(totalAmount)
           await walletClient.writeContract({
-            address: addresses.realitioERC20 as `0x${string}`,
+            address: addr.reality as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'submitAnswerCommitmentWithPermit2',
             args: [questionId, answerHash, bondAmount, permit, signature, address],
@@ -198,9 +196,9 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
         } else if (paymentMode === 'permit2612') {
           // Use EIP-2612 Permit
           const { deadline, v, r, s } = await signPermit2612(totalAmount)
-          const bondToken = question.bondToken || deployments?.USDT || '0x0000000000000000000000000000000000000000'
+          const bondToken = question.bondToken || deploymentsState?.USDT || '0x0000000000000000000000000000000000000000'
           await walletClient.writeContract({
-            address: addresses.realitioERC20 as `0x${string}`,
+            address: addr.reality as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'submitAnswerCommitmentWithPermit2612',
             args: [questionId, answerHash, bondAmount, bondToken as `0x${string}`, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`],
@@ -212,11 +210,11 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
               address: question.bondToken as `0x${string}`,
               abi: ERC20_ABI,
               functionName: 'approve',
-              args: [addresses.realitioERC20 as `0x${string}`, totalAmount],
+              args: [addr.reality as `0x${string}`, totalAmount],
             })
           }
           await walletClient.writeContract({
-            address: addresses.realitioERC20 as `0x${string}`,
+            address: addr.reality as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'submitAnswerCommitment',
             args: [questionId, answerHash, bondAmount],
@@ -224,11 +222,11 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
         }
       } else {
         // Submit answer directly
-        if (paymentMode === 'permit2' && deployments?.PERMIT2) {
+        if (paymentMode === 'permit2' && deploymentsState?.PERMIT2) {
           // Use Permit2
           const { permit, signature } = await signPermit2(totalAmount)
           await walletClient.writeContract({
-            address: addresses.realitioERC20 as `0x${string}`,
+            address: addr.reality as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'submitAnswerWithPermit2',
             args: [questionId, answerBytes, bondAmount, permit, signature, address],
@@ -236,9 +234,9 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
         } else if (paymentMode === 'permit2612') {
           // Use EIP-2612 Permit
           const { deadline, v, r, s } = await signPermit2612(totalAmount)
-          const bondToken = question.bondToken || deployments?.USDT || '0x0000000000000000000000000000000000000000'
+          const bondToken = question.bondToken || deploymentsState?.USDT || '0x0000000000000000000000000000000000000000'
           await walletClient.writeContract({
-            address: addresses.realitioERC20 as `0x${string}`,
+            address: addr.reality as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'submitAnswerWithPermit2612',
             args: [questionId, answerBytes, bondAmount, bondToken as `0x${string}`, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`],
@@ -250,17 +248,17 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
               address: question.bondToken as `0x${string}`,
               abi: ERC20_ABI,
               functionName: 'approve',
-              args: [addresses.realitioERC20 as `0x${string}`, totalAmount],
+              args: [addr.reality as `0x${string}`, totalAmount],
             })
             await walletClient.writeContract({
-              address: addresses.realitioERC20 as `0x${string}`,
+              address: addr.reality as `0x${string}`,
               abi: REALITIO_ABI,
               functionName: 'submitAnswerWithToken',
               args: [questionId, answerBytes, bondAmount, question.bondToken as `0x${string}`],
             })
           } else {
             await walletClient.writeContract({
-              address: addresses.realitioERC20 as `0x${string}`,
+              address: addr.reality as `0x${string}`,
               abi: REALITIO_ABI,
               functionName: 'submitAnswer',
               args: [questionId, answerBytes, bondAmount],
@@ -286,14 +284,13 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
     setError('')
     
     try {
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses) throw new Error('Contract addresses not found')
+      if (!addr.reality) throw new Error('Contract addresses not found')
       
       const answerBytes = pad(toHex(BigInt(revealForm.answer)), { size: 32 })
       const nonceBytes = keccak256(toHex(revealForm.nonce))
       
       await walletClient.writeContract({
-        address: addresses.realitioERC20 as `0x${string}`,
+        address: addr.reality as `0x${string}`,
         abi: REALITIO_ABI,
         functionName: 'revealAnswer',
         args: [questionId, answerBytes, nonceBytes],
@@ -316,11 +313,10 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
     setError('')
     
     try {
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses) throw new Error('Contract addresses not found')
+      if (!addr.reality) throw new Error('Contract addresses not found')
       
       await walletClient.writeContract({
-        address: addresses.realitioERC20 as `0x${string}`,
+        address: addr.reality as `0x${string}`,
         abi: REALITIO_ABI,
         functionName: 'finalize',
         args: [questionId],
@@ -333,6 +329,27 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
     } finally {
       setActionLoading(false)
     }
+  }
+
+  // Loading guards
+  if (addrLoading) {
+    return (
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="text-center opacity-70">Loading network deployments…</div>
+      </div>
+    )
+  }
+  
+  if (addrError || !addrReady) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-300">
+          Missing deployment info for chain {chainId}. Ensure 
+          <code className="mx-1 px-1 rounded bg-black/40">/deployments/{chainId}.json</code>
+          exists in <code className="px-1 rounded bg-black/40">packages/web/public/deployments</code>.
+        </div>
+      </div>
+    )
   }
 
   if (loading) {

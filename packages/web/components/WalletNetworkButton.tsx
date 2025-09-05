@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAccount, useChainId, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 
@@ -25,8 +25,16 @@ export default function WalletNetworkButton() {
   const { address, isConnected } = useAccount();
   const { connect, connectors, isPending: isConnecting } = useConnect();
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
+  
+  // Use a mounted state to prevent hydration mismatches
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  const status = statusOf(isConnected, chainId);
+  // Default to disconnected state during SSR to prevent hydration issues
+  const status = mounted ? statusOf(isConnected, chainId) : "NOT_CONNECTED";
+  
   const kaia = useMemo(() => {
     return connectors.find(c => c.id === "injected" && c.name === "KaiaWallet") ?? 
            connectors.find(c => c.name === "KaiaWallet") ?? 
@@ -52,7 +60,7 @@ export default function WalletNetworkButton() {
     status === "WRONG_NETWORK" ? <Alert /> :
     status === "MAINNET" ? <Dot cls="bg-sky-400" /> : <Dot cls="bg-emerald-400" />;
 
-  const suffix = isConnected ? ` · ${short(address)}` : "";
+  const suffix = mounted && isConnected ? ` · ${short(address)}` : "";
   const busy = isConnecting || isDisconnecting;
 
   const base = "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-400/40";

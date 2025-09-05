@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAccount, useWalletClient, useChainId, usePublicClient } from "wagmi";
 import { parseUnits } from "viem";
-import { getDeployments } from "@/lib/deployments.generated";
+import { useAddresses } from "@/lib/contracts.client";
 
 // MockUSDT faucet ABI
 const FAUCET_ABI = [
@@ -44,6 +44,7 @@ export default function FaucetButton() {
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const chainId = useChainId();
+  const { addr, deployments } = useAddresses();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -54,12 +55,11 @@ export default function FaucetButton() {
     setMounted(true);
   }, []);
 
-  // Memoize deployments to avoid calling during render
+  // Get USDT address from deployments
   const tusdtAddress = useMemo(() => {
-    if (!mounted) return null;
-    const deployments = getDeployments(chainId);
+    if (!mounted || !deployments) return null;
     return deployments?.USDT || deployments?.MockUSDT;
-  }, [chainId, mounted]);
+  }, [deployments, mounted]);
 
   // Don't render anything on server or when not on testnet
   if (!mounted) return null;

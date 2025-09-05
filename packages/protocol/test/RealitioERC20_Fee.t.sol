@@ -36,7 +36,8 @@ contract RealitioERC20FeeTest is Test {
     
     function setUp() public {
         // Deploy contracts
-        realitio = new RealitioERC20(FEE_RECIPIENT, FEE_BPS);
+        address permit2 = address(0); // No permit2 needed for basic fee tests
+        realitio = new RealitioERC20(FEE_RECIPIENT, FEE_BPS, permit2);
         tUSDT = new MockUSDT();
         wkaia = new MockWKAIA();
         zapper = new ZapperWKAIA(address(wkaia), address(realitio));

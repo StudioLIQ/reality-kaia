@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAccount, usePublicClient, useChainId } from 'wagmi'
 import { formatEther } from 'viem'
-import { REALITIO_ABI, getDeployedAddresses } from '@/lib/contracts'
+import { REALITIO_ABI } from '@/lib/contracts'
+import { useAddresses } from '@/lib/contracts.client'
 import Link from 'next/link'
 import QuestionFilters, { type QuestionRow } from '@/components/QuestionFilters'
 import StatCard from '@/components/StatCard'
@@ -18,6 +19,7 @@ export default function Home() {
   const publicClient = usePublicClient()
   const chainId = useChainId()
   const { address } = useAccount()
+  const { addr, ready: addrReady, loading: addrLoading, error: addrError } = useAddresses()
   
   // Handle client-side mounting
   useEffect(() => {
@@ -28,15 +30,14 @@ export default function Home() {
     async function loadQuestions() {
       if (!publicClient || !mounted) return
       
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses) {
+      if (!addr.reality) {
         setLoading(false)
         return
       }
 
       try {
         const logs = await publicClient.getLogs({
-          address: addresses.realitioERC20 as `0x${string}`,
+          address: addr.reality as `0x${string}`,
           event: {
             type: 'event',
             name: 'LogNewQuestion',
@@ -49,7 +50,7 @@ export default function Home() {
         const questionPromises = logs.map(async (log: any) => {
           const questionId = log.args.questionId
           const questionData = await publicClient.readContract({
-            address: addresses.realitioERC20 as `0x${string}`,
+            address: addr.reality as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'getQuestion',
             args: [questionId],
@@ -125,7 +126,33 @@ export default function Home() {
     return { openQuestions, totalQuestions, totalBondValue }
   }, [filteredQuestions])
 
-  if (!mounted || loading) {
+  // Loading guards
+  if (addrLoading || !mounted) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="inline-flex h-8 w-8 animate-spin rounded-full border-2 border-emerald-400 border-r-transparent" />
+            <p className="mt-4 text-white/60">Loading network deployments...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  if (addrError || !addrReady) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-300">
+          Missing deployment info for chain {chainId}. Ensure 
+          <code className="mx-1 px-1 rounded bg-black/40">/deployments/{chainId}.json</code>
+          exists in <code className="px-1 rounded bg-black/40">packages/web/public/deployments</code>.
+        </div>
+      </div>
+    )
+  }
+  
+  if (loading) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8">
         <div className="flex items-center justify-center min-h-[400px]">

@@ -21,9 +21,9 @@ contract DeployAll is Script {
         
         vm.startBroadcast(deployerPrivateKey);
         
-        // Read fee params from environment
-        address feeRecipient = vm.envAddress("FEE_RECIPIENT");
-        uint16 feeBps = uint16(vm.envUint("FEE_BPS"));
+        // Read fee params from environment with defaults for CI
+        address feeRecipient = vm.envOr("FEE_RECIPIENT", address(0x7abEdc832254DaA2032505e33A8Dd325841D6f2D));
+        uint16 feeBps = uint16(vm.envOr("FEE_BPS", uint256(25)));
         
         // Read token addresses from environment with fallback defaults
         address usdtMainnet = vm.envOr("USDT_MAINNET", 0xd077A400968890Eacc75cdc901F0356c943e4fDb);

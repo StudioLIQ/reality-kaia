@@ -84,7 +84,7 @@ export default function TokenSelector({
     }
 
     fetchBalances();
-  }, [address, isConnected, publicClient, tokens, nativeBalance]);
+  }, [address, isConnected, publicClient, tokens.length, nativeBalance?.value]);
 
   return (
     <div className="space-y-3">

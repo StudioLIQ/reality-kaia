@@ -6,12 +6,11 @@ import { parseUnits, keccak256, toBytes } from 'viem'
 import { 
   REALITIO_ERC20_ABI, 
   ERC20_ABI,
-  getDeployedAddresses, 
   resolveBondTokens,
   resolveBondTokensWithStatus,
   calculateFee
 } from '@/lib/contracts'
-import { getDeployments } from '@/lib/deployments.generated'
+import { useAddresses } from '@/lib/contracts.client'
 import { USDT_MAINNET, type Addr } from '@/lib/viem'
 import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput, fromNow } from '@/lib/time'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
@@ -33,9 +32,9 @@ export default function CreateQuestion() {
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
   const chainId = useChainId()
+  const { addr, deployments, ready: addrReady, loading: addrLoading, error: addrError, feeBps } = useAddresses()
   
   const templates = getAllowedTemplates(chainId)
-  const deployments = getDeployments(chainId)
   const availableTokens = TOKENS_FOR(chainId, deployments || {})
   
   const [templateId, setTemplateId] = useState<number | undefined>(templates[0]?.id)
@@ -73,17 +72,16 @@ export default function CreateQuestion() {
     async function calculateFeeQuote() {
       if (!bondToken || !publicClient || !bondAmount) return
       
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses?.realitioERC20) return
+      if (!addr.reality) return
       
       try {
         const bondRaw = parseUnits(bondAmount || '0', bondToken.decimals)
         const quote = await quoteFee({
           client: publicClient,
-          reality: addresses.realitioERC20 as Addr,
+          reality: addr.reality as Addr,
           bondTokenDecimals: bondToken.decimals,
           bondRaw,
-          feeBpsFallback: feeInfo?.feeBps || 25
+          feeBpsFallback: feeBps || 25
         })
         setFeeQuote({ feeFormatted: quote.feeFormatted, totalFormatted: quote.totalFormatted })
       } catch (err) {
@@ -92,7 +90,7 @@ export default function CreateQuestion() {
     }
     
     calculateFeeQuote()
-  }, [bondAmount, bondToken, publicClient, chainId, feeInfo])
+  }, [bondAmount, bondToken?.decimals, bondToken?.address, publicClient, chainId, addr.reality, feeBps])
 
   // Load fee info from deployments and contract addresses
   useEffect(() => {
@@ -102,15 +100,7 @@ export default function CreateQuestion() {
         feeRecipient: deployments.feeRecipient
       })
     }
-  }, [deployments])
-  
-  useEffect(() => {
-    async function loadAddresses() {
-      const addrs = await getDeployedAddresses(chainId)
-      setContractAddresses(addrs)
-    }
-    loadAddresses()
-  }, [chainId])
+  }, [deployments?.feeBps, deployments?.feeRecipient])
 
   useEffect(() => {
     async function checkAllowance() {
@@ -118,14 +108,13 @@ export default function CreateQuestion() {
       
       setCheckingAllowance(true)
       try {
-        const addresses = await getDeployedAddresses(chainId)
-        if (!addresses) return
+        if (!addr.reality) return
         
         const allowanceValue = await publicClient.readContract({
           address: bondToken.address,
           abi: ERC20_ABI,
           functionName: 'allowance',
-          args: [address, addresses.realitioERC20 as Addr],
+          args: [address, addr.reality as Addr],
         })
         
         setAllowance(allowanceValue as bigint)
@@ -137,7 +126,7 @@ export default function CreateQuestion() {
     }
     
     checkAllowance()
-  }, [bondToken, address, publicClient, chainId])
+  }, [bondToken?.address, address, publicClient, chainId, addr.reality])
 
   const handleApprove = async () => {
     if (!walletClient || !bondToken?.address || !address || !bondAmount) return
@@ -146,8 +135,7 @@ export default function CreateQuestion() {
     setError('')
     
     try {
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses) throw new Error('Contract addresses not found')
+      if (!addr.reality) throw new Error('Contract addresses not found')
       
       // Calculate total amount with fee for the actual bond amount
       const bondRaw = parseUnits(bondAmount, bondToken.decimals)
@@ -158,7 +146,7 @@ export default function CreateQuestion() {
         address: bondToken.address,
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [addresses.realitioERC20 as Addr, total],
+        args: [addr.reality as Addr, total],
       })
       
       // Wait for transaction confirmation
@@ -183,14 +171,13 @@ export default function CreateQuestion() {
     if (!bondToken?.address || !address || !publicClient) return
     
     try {
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses) return
+      if (!addr.reality) return
       
       const allowanceValue = await publicClient.readContract({
         address: bondToken.address,
         abi: ERC20_ABI,
         functionName: 'allowance',
-        args: [address, addresses.realitioERC20 as Addr],
+        args: [address, addr.reality as Addr],
       })
       
       setAllowance(allowanceValue as bigint)
@@ -220,15 +207,14 @@ export default function CreateQuestion() {
     setError('')
 
     try {
-      const addresses = await getDeployedAddresses(chainId)
-      if (!addresses) {
+      if (!addr.reality) {
         throw new Error('Contract addresses not found')
       }
 
       const randomValue = crypto.getRandomValues(new Uint8Array(32))
       const nonce = keccak256(randomValue)
       
-      const arbitratorAddress = formData.arbitrator || addresses.arbitratorSimple
+      const arbitratorAddress = formData.arbitrator || addr.arbitrator || contractAddresses?.arbitratorSimple
       const currentOpeningTs = useNow ? Math.floor(Date.now() / 1000) : openingTs
 
       // Check if we should use Zapper for WKAIA
@@ -238,12 +224,12 @@ export default function CreateQuestion() {
       
       if (useZapper && bondToken.label === 'WKAIA') {
         // Use Zapper to convert native KAIA to WKAIA
-        const zapperAddress = deployments?.zapperAddress || contractAddresses?.zapper
+        const zapperAddress = addr.zapper || deployments?.zapperWKAIA
         
         if (!zapperAddress) {
           // Fallback to regular flow if Zapper not available
           hash = await walletClient.writeContract({
-            address: addresses.realitioERC20 as Addr,
+            address: addr.reality as Addr,
             abi: REALITIO_ERC20_ABI,
             functionName: 'askQuestionERC20',
             args: [
@@ -261,7 +247,7 @@ export default function CreateQuestion() {
             publicClient,
             walletClient,
             zapperAddress: zapperAddress as Addr,
-            realitioAddress: addresses.realitioERC20 as Addr,
+            realitioAddress: addr.reality as Addr,
             bondToken: bondToken.address,
             bondAmount,
             templateId: Number(templateId),
@@ -276,7 +262,7 @@ export default function CreateQuestion() {
       } else {
         // Regular ERC20 flow
         hash = await walletClient.writeContract({
-          address: addresses.realitioERC20 as Addr,
+          address: addr.reality as Addr,
           abi: REALITIO_ERC20_ABI,
           functionName: 'askQuestionERC20',
           args: [
@@ -298,6 +284,20 @@ export default function CreateQuestion() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Loading and error guards
+  if (addrLoading) return <div className="mx-auto max-w-6xl px-4 py-6 opacity-70">Loading network deployments…</div>;
+  if (addrError || !addrReady) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-300">
+          Missing deployment info for chain {chainId}. Ensure 
+          <code className="mx-1 px-1 rounded bg-black/40">/deployments/{chainId}.json</code>
+          exists in <code className="px-1 rounded bg-black/40">packages/web/public/deployments</code>.
+        </div>
+      </div>
+    );
   }
 
   return (

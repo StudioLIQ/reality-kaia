@@ -3,23 +3,11 @@ pragma solidity ^0.8.25;
 
 import "./interfaces/IReality.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {RealityLib} from "./RealityLib.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IPermit2} from "./interfaces/IPermit2.sol";
-
-// EIP-2612 interface for permit
-interface IERC20Permit {
-    function permit(
-        address owner,
-        address spender, 
-        uint256 value,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
-}
 
 contract RealitioERC20 is IReality, ReentrancyGuard {
     using SafeERC20 for IERC20;
