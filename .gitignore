@@ -9,4 +9,4 @@ broadcast/
 *.log
 .DS_Store
 .idea/
-deployment/
+deployment

@@ -20,7 +20,7 @@ export default function NetworkWatcher() {
     if (!mounted) return;
     
     if (isConnected && chainId && prevChainId && chainId !== prevChainId) {
-      console.log('Chain ID changed from', prevChainId, 'to', chainId);
+      // Chain changed from prevChainId to chainId
       // Refresh the page data when network changes
       router.refresh();
     }
@@ -35,7 +35,7 @@ export default function NetworkWatcher() {
     if (!mounted) return;
     
     if (publicClient) {
-      console.log('Network client updated');
+      // Network client updated
     }
   }, [publicClient, mounted]);
 

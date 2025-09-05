@@ -11,6 +11,7 @@ import { PaymentModeSelector, type PaymentMode } from '@/components/PaymentModeS
 import { usePermit2, usePermit2612 } from '@/hooks/usePermit2'
 import { quoteFee } from '@/lib/fees'
 import { SignatureTransfer } from '@uniswap/permit2-sdk'
+import { createPermitTransferFrom } from '@/lib/permit'
 import FeeNotice from '@/components/FeeNotice'
 import DisclaimerBadge from '@/components/DisclaimerBadge'
 import DisclaimerGate from '@/components/DisclaimerGate'
@@ -215,15 +216,22 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
                 token: addr.wkaia!,
                 amount: desiredWkaia
               },
+              spender: addr.zapper!,
               nonce,
               deadline
             }
             const permitData = SignatureTransfer.getPermitData(permit, addr.permit2!, chainId)
             signature = await walletClient.signTypedData({
-              domain: permitData.domain,
+              domain: {
+                name: permitData.domain.name,
+                version: permitData.domain.version,
+                chainId: Number(permitData.domain.chainId),
+                verifyingContract: permitData.domain.verifyingContract as `0x${string}`,
+                ...(permitData.domain.salt && { salt: permitData.domain.salt as `0x${string}` })
+              },
               types: permitData.types,
               primaryType: 'PermitTransferFrom',
-              message: permitData.message,
+              message: permitData.values as any,
               account: address
             })
           } else {
@@ -233,6 +241,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
                 token: addr.wkaia || '0x0000000000000000000000000000000000000000',
                 amount: 0n
               },
+              spender: addr.zapper!,
               nonce: 0n,
               deadline: BigInt(Math.floor(Date.now() / 1000) + 3600)
             }
@@ -334,15 +343,22 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
                 token: addr.wkaia!,
                 amount: desiredWkaia
               },
+              spender: addr.zapper!,
               nonce,
               deadline
             }
             const permitData = SignatureTransfer.getPermitData(permit, addr.permit2!, chainId)
             signature = await walletClient.signTypedData({
-              domain: permitData.domain,
+              domain: {
+                name: permitData.domain.name,
+                version: permitData.domain.version,
+                chainId: Number(permitData.domain.chainId),
+                verifyingContract: permitData.domain.verifyingContract as `0x${string}`,
+                ...(permitData.domain.salt && { salt: permitData.domain.salt as `0x${string}` })
+              },
               types: permitData.types,
               primaryType: 'PermitTransferFrom',
-              message: permitData.message,
+              message: permitData.values as any,
               account: address
             })
           } else {
@@ -352,6 +368,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
                 token: addr.wkaia || '0x0000000000000000000000000000000000000000',
                 amount: 0n
               },
+              spender: addr.zapper!,
               nonce: 0n,
               deadline: BigInt(Math.floor(Date.now() / 1000) + 3600)
             }

@@ -11,23 +11,11 @@ interface IReality {
         bytes32 nonce
     ) external returns (bytes32 questionId);
 
-    function submitAnswer(
-        bytes32 questionId,
-        bytes32 answer,
-        uint256 bond
-    ) external;
+    function submitAnswer(bytes32 questionId, bytes32 answer, uint256 bond) external;
 
-    function submitAnswerCommitment(
-        bytes32 questionId,
-        bytes32 answerHash,
-        uint256 bond
-    ) external;
+    function submitAnswerCommitment(bytes32 questionId, bytes32 answerHash, uint256 bond) external;
 
-    function revealAnswer(
-        bytes32 questionId,
-        bytes32 answer,
-        bytes32 nonce
-    ) external;
+    function revealAnswer(bytes32 questionId, bytes32 answer, bytes32 nonce) external;
 
     function finalize(bytes32 questionId) external;
 
@@ -59,48 +47,22 @@ interface IReality {
     );
 
     event LogNewAnswer(
-        bytes32 indexed questionId,
-        bytes32 indexed answer,
-        address indexed answerer,
-        uint256 bond,
-        uint256 ts
+        bytes32 indexed questionId, bytes32 indexed answer, address indexed answerer, uint256 bond, uint256 ts
     );
 
     event LogNewCommitment(
-        bytes32 indexed questionId,
-        bytes32 indexed answerHash,
-        address indexed committer,
-        uint256 bond,
-        uint256 ts
+        bytes32 indexed questionId, bytes32 indexed answerHash, address indexed committer, uint256 bond, uint256 ts
     );
 
     event LogReveal(
-        bytes32 indexed questionId,
-        address indexed revealer,
-        bytes32 indexed answer,
-        bytes32 answerHash,
-        uint256 bond
+        bytes32 indexed questionId, address indexed revealer, bytes32 indexed answer, bytes32 answerHash, uint256 bond
     );
 
-    event LogFinalize(
-        bytes32 indexed questionId,
-        bytes32 indexed answer
-    );
+    event LogFinalize(bytes32 indexed questionId, bytes32 indexed answer);
 
-    event LogArbitrationRequested(
-        bytes32 indexed questionId,
-        address indexed requester
-    );
+    event LogArbitrationRequested(bytes32 indexed questionId, address indexed requester);
 
-    event LogArbitratorAnswered(
-        bytes32 indexed questionId,
-        bytes32 indexed answer,
-        address indexed arbitrator
-    );
+    event LogArbitratorAnswered(bytes32 indexed questionId, bytes32 indexed answer, address indexed arbitrator);
 
-    event LogClaim(
-        bytes32 indexed questionId,
-        address indexed winner,
-        uint256 amount
-    );
+    event LogClaim(bytes32 indexed questionId, address indexed winner, uint256 amount);
 }

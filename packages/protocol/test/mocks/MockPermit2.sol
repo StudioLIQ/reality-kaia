@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract MockPermit2 is IPermit2 {
     mapping(address => mapping(address => mapping(address => uint256))) public allowance;
-    
+
     function permitTransferFrom(
         PermitTransferFrom calldata permit,
         SignatureTransferDetails calldata transferDetails,
@@ -16,11 +16,8 @@ contract MockPermit2 is IPermit2 {
         // Simple mock implementation that just transfers tokens
         // In a real implementation, this would verify signatures
         IERC20 token = IERC20(permit.permitted.token);
-        
+
         // Transfer from owner to the recipient
-        require(
-            token.transferFrom(owner, transferDetails.to, transferDetails.requestedAmount),
-            "Transfer failed"
-        );
+        require(token.transferFrom(owner, transferDetails.to, transferDetails.requestedAmount), "Transfer failed");
     }
 }

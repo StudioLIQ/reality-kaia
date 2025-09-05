@@ -1,4 +1,3 @@
-// packages/web/lib/addresses.ts
 "use client";
 import { useChainId } from "wagmi";
 import { useEffect, useState } from "react";
@@ -16,7 +15,7 @@ export type DeploymentSchema = {
   [k: string]: any;
 };
 
-// (옵션) script가 생성한 TS 헬퍼가 있으면 우선 사용
+// Try to load generated deployments if available
 let getGenerated: ((chainId: number) => any) | undefined;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -40,7 +39,10 @@ export async function loadDeployments(chainId: number) {
   return await loadRuntime(chainId);
 }
 
-/** 연결 안된 경우 기본 체인을 8217(Mainnet)로 사용 (원하면 1001로 바꿔도 됨) */
+/**
+ * Hook to load network-specific deployments
+ * @param defaultChain - Chain ID to use when not connected (defaults to mainnet)
+ */
 export function useNetworkDeployments(defaultChain = 8217) {
   const chainId = useChainId() || defaultChain;
   const [data, setData] = useState<DeploymentSchema | null>(null);

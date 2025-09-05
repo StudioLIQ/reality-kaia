@@ -1,12 +1,10 @@
 "use client";
 import { useMemo, useState, useEffect } from "react";
 import { useAccount, useChainId, useConnect, useDisconnect } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { shortAddress } from "@/lib/format";
+import { KAIA_MAINNET_ID, KAIA_TESTNET_ID } from "@/lib/chain";
 
 export type NetStatus = "NOT_CONNECTED" | "WRONG_NETWORK" | "MAINNET" | "TESTNET";
-const KAIA_MAINNET_ID = 8217;
-const KAIA_TESTNET_ID = 1001;
-const short = (a?: `0x${string}`) => (a ? `${a.slice(0,6)}…${a.slice(-4)}` : "");
 
 const statusOf = (connected: boolean, id?: number): NetStatus => {
   if (!connected) return "NOT_CONNECTED";
@@ -15,10 +13,22 @@ const statusOf = (connected: boolean, id?: number): NetStatus => {
   return "WRONG_NETWORK";
 };
 
-// tiny inline icons
-const Dot = ({ cls }: { cls: string }) => <span className={`inline-block h-2 w-2 rounded-full ${cls}`} aria-hidden="true" />;
-const Plug = () => (<svg width="14" height="14" viewBox="0 0 24 24" className="opacity-90"><path fill="currentColor" d="M7 7h10v3a5 5 0 0 1-5 5H7V7Zm2-5h6v4H9V2Zm-5 6h4v10H6a2 2 0 0 1-2-2V8Z"/></svg>);
-const Alert = () => (<svg width="14" height="14" viewBox="0 0 24 24" className="opacity-90"><path fill="currentColor" d="M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z"/></svg>);
+// Icon components
+const Dot = ({ cls }: { cls: string }) => (
+  <span className={`inline-block h-2 w-2 rounded-full ${cls}`} aria-hidden="true" />
+);
+
+const Plug = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" className="opacity-90">
+    <path fill="currentColor" d="M7 7h10v3a5 5 0 0 1-5 5H7V7Zm2-5h6v4H9V2Zm-5 6h4v10H6a2 2 0 0 1-2-2V8Z" />
+  </svg>
+);
+
+const Alert = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" className="opacity-90">
+    <path fill="currentColor" d="M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z" />
+  </svg>
+);
 
 export default function WalletNetworkButton() {
   const chainId = useChainId();
@@ -60,7 +70,7 @@ export default function WalletNetworkButton() {
     status === "WRONG_NETWORK" ? <Alert /> :
     status === "MAINNET" ? <Dot cls="bg-sky-400" /> : <Dot cls="bg-emerald-400" />;
 
-  const suffix = mounted && isConnected ? ` · ${short(address)}` : "";
+  const suffix = mounted && isConnected ? ` · ${shortAddress(address)}` : "";
   const busy = isConnecting || isDisconnecting;
 
   const base = "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-400/40";

@@ -15,7 +15,8 @@ interface IRealityERC20 {
     function feeOn(uint256 amount) external view returns (uint256 fee, uint256 total);
     function bondTokenOf(bytes32 qid) external view returns (address);
     function submitAnswerFromZapper(bytes32 qid, bytes32 answer, uint256 bond, address answerer) external;
-    function submitAnswerCommitmentFromZapper(bytes32 qid, bytes32 commitment, uint256 bond, address committer) external;
+    function submitAnswerCommitmentFromZapper(bytes32 qid, bytes32 commitment, uint256 bond, address committer)
+        external;
 }
 
 /**
@@ -78,10 +79,7 @@ contract ZapperWKAIA is ReentrancyGuard {
             if (req > 0) {
                 IPermit2(PERMIT2).permitTransferFrom(
                     permit,
-                    IPermit2.SignatureTransferDetails({
-                        to: address(this),
-                        requestedAmount: req
-                    }),
+                    IPermit2.SignatureTransferDetails({to: address(this), requestedAmount: req}),
                     owner,
                     signature
                 );
@@ -94,7 +92,7 @@ contract ZapperWKAIA is ReentrancyGuard {
         if (need > 0) {
             if (msg.value < need) revert InsufficientKAIA();
             WKAIA.deposit{value: need}();
-            
+
             // Refund any excess msg.value
             if (msg.value > need) {
                 (bool ok,) = msg.sender.call{value: msg.value - need}("");
@@ -152,10 +150,7 @@ contract ZapperWKAIA is ReentrancyGuard {
             if (req > 0) {
                 IPermit2(PERMIT2).permitTransferFrom(
                     permit,
-                    IPermit2.SignatureTransferDetails({
-                        to: address(this),
-                        requestedAmount: req
-                    }),
+                    IPermit2.SignatureTransferDetails({to: address(this), requestedAmount: req}),
                     owner,
                     signature
                 );
@@ -168,7 +163,7 @@ contract ZapperWKAIA is ReentrancyGuard {
         if (need > 0) {
             if (msg.value < need) revert InsufficientKAIA();
             WKAIA.deposit{value: need}();
-            
+
             // Refund any excess msg.value
             if (msg.value > need) {
                 (bool ok,) = msg.sender.call{value: msg.value - need}("");
