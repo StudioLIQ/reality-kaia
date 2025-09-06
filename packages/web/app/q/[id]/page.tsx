@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEther, parseUnits, formatUnits, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
 import { REALITIO_ABI, ERC20_ABI, resolveBondTokens, type BondToken } from '@/lib/contracts'
+import { realityV2Abi } from '@/lib/abi/realityV2'
 import { useAddresses } from '@/lib/contracts.client'
 import { CHAIN_LABEL } from '@/lib/viem'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
@@ -30,6 +31,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
   const gated = (status === "NOT_CONNECTED" || status === "WRONG_NETWORK")
   
   const [question, setQuestion] = useState<any>(null)
+  const [questionMetadata, setQuestionMetadata] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState('')
@@ -59,12 +61,45 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
     try {
       if (!addr.reality) { setLoading(false); return }
 
-      const questionData = await publicClient.readContract({
-        address: addr.reality as `0x${string}`,
-        abi: REALITIO_ABI,
-        functionName: 'getQuestion',
-        args: [questionId],
-      })
+      // Try to get V2 metadata first, fallback to V1
+      let questionData: any
+      let metadata: any = null
+      
+      try {
+        // Try V2 getQuestionFull which returns full metadata
+        const v2Data = await publicClient.readContract({
+          address: addr.reality as `0x${string}`,
+          abi: realityV2Abi as any,
+          functionName: 'getQuestionFull',
+          args: [questionId],
+        })
+        
+        questionData = v2Data
+        metadata = {
+          asker: v2Data[0],
+          arbitrator: v2Data[1],
+          bondToken: v2Data[2],
+          templateId: v2Data[3],
+          timeout: v2Data[4],
+          openingTs: v2Data[5],
+          contentHash: v2Data[6],
+          createdAt: v2Data[7],
+          content: v2Data[8],
+          outcomesPacked: v2Data[9],
+          language: v2Data[10],
+          category: v2Data[11],
+          metadataURI: v2Data[12],
+        }
+      } catch (error) {
+        // Fallback to V1
+        console.log('V2 failed, using V1:', error)
+        questionData = await publicClient.readContract({
+          address: addr.reality as `0x${string}`,
+          abi: REALITIO_ABI,
+          functionName: 'getQuestion',
+          args: [questionId],
+        })
+      }
 
       const questionInfo = {
         id: questionId,
@@ -81,6 +116,7 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
       }
       
       setQuestion(questionInfo)
+      setQuestionMetadata(metadata)
       
       // Get bond token info and fee info
       setDeploymentsState(deployments)
@@ -566,6 +602,31 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
                 <p className="font-mono text-xs">{question.id}</p>
               </div>
               
+              {/* Question Content */}
+              {questionMetadata?.content && (
+                <div>
+                  <p className="text-sm text-gray-500">Question</p>
+                  <div className="mt-1 p-3 bg-gray-50 rounded-md">
+                    <p className="text-sm whitespace-pre-wrap">{questionMetadata.content}</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Answer Choices (for Multiple Choice) */}
+              {questionMetadata?.outcomesPacked && questionMetadata.outcomesPacked.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-500">Answer Choices</p>
+                  <div className="mt-1 space-y-1">
+                    {questionMetadata.outcomesPacked.split('\u001F').map((choice: string, index: number) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                        <span className="text-xs font-medium text-gray-500 w-6">{String.fromCharCode(65 + index)})</span>
+                        <span className="text-sm">{choice}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               <div>
                 <p className="text-sm text-gray-500">Status</p>
                 <p className="font-medium">{question.finalized ? 'Finalized' : 'Open'}</p>
@@ -574,14 +635,58 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
               <div>
                 <p className="text-sm text-gray-500">Template</p>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-600">
-                    Template info not available
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    (Template ID is not stored on-chain)
-                  </span>
+                  {questionMetadata?.templateId ? (
+                    <>
+                      <span className="rounded-full border border-blue-400/30 bg-blue-400/10 px-2 py-0.5 text-xs text-blue-600">
+                        Template {questionMetadata.templateId}
+                      </span>
+                      {questionMetadata.templateId === 3 && (
+                        <span className="text-xs text-gray-500">(Multiple Choice)</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-600">
+                        Template info not available
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        (Template ID is not stored on-chain)
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
+              
+              {/* Category */}
+              {questionMetadata?.category && (
+                <div>
+                  <p className="text-sm text-gray-500">Category</p>
+                  <p className="font-medium">{questionMetadata.category}</p>
+                </div>
+              )}
+              
+              {/* Language */}
+              {questionMetadata?.language && (
+                <div>
+                  <p className="text-sm text-gray-500">Language</p>
+                  <p className="font-medium">{questionMetadata.language}</p>
+                </div>
+              )}
+              
+              {/* Metadata URI */}
+              {questionMetadata?.metadataURI && (
+                <div>
+                  <p className="text-sm text-gray-500">Metadata URI</p>
+                  <a 
+                    href={questionMetadata.metadataURI} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 text-sm break-all"
+                  >
+                    {questionMetadata.metadataURI}
+                  </a>
+                </div>
+              )}
               
               <div>
                 <p className="text-sm text-gray-500">Bond Token</p>

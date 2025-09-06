@@ -11,6 +11,7 @@ import {
   calculateFee
 } from '@/lib/contracts'
 import { realityAbi } from '@/lib/abi/reality'
+import { realityV2Abi } from '@/lib/abi/realityV2'
 import { useAddresses } from '@/lib/contracts.client'
 import { USDT_MAINNET, type Addr } from '@/lib/viem'
 import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput, fromNow } from '@/lib/time'
@@ -43,7 +44,10 @@ export default function CreateQuestion() {
   const [formData, setFormData] = useState({
     question: '',
     arbitrator: '',
+    category: '',
+    metadataURI: '',
   })
+  const [outcomes, setOutcomes] = useState<string[]>([])
   const [bondToken, setBondToken] = useState<BondToken | undefined>(
     availableTokens.find(t => t.label === 'USDT') || availableTokens[0]
   )
@@ -273,22 +277,51 @@ export default function CreateQuestion() {
         }
       } catch {}
 
-      // Always call Reality directly for creation
-      const hash = await walletClient.writeContract({
-        address: addr.reality as Addr,
-        abi: REALITIO_ERC20_ABI,
-        functionName: 'askQuestionERC20',
-        args: [
-          bondToken.address,
-          Number(templateId),
-          formData.question,
-          arbitratorAddress as Addr,
-          Math.floor(timeoutSec),
-          Math.floor(currentOpeningTs),
-          nonce,
-        ],
-        account: address,
-      })
+      // Pack outcomes for multiple choice questions
+      const SEP = "\u001F";
+      const outcomesPacked = (templateId === 3 && outcomes.length) ? outcomes.join(SEP) : "";
+
+      // Try V2 first, fallback to V1
+      let hash: `0x${string}`;
+      try {
+        hash = await walletClient.writeContract({
+          address: addr.reality as Addr,
+          abi: realityV2Abi as any,
+          functionName: 'askQuestionERC20Full',
+          args: [
+            bondToken.address,
+            Number(templateId),
+            formData.question,
+            outcomesPacked,
+            arbitratorAddress as Addr,
+            Math.floor(timeoutSec),
+            Math.floor(currentOpeningTs),
+            nonce,
+            "en",                // language
+            formData.category || "",
+            formData.metadataURI || ""
+          ],
+          account: address,
+        });
+      } catch (error) {
+        // Fallback to V1 (content only)
+        console.log('V2 failed, falling back to V1:', error);
+        hash = await walletClient.writeContract({
+          address: addr.reality as Addr,
+          abi: REALITIO_ERC20_ABI,
+          functionName: 'askQuestionERC20',
+          args: [
+            bondToken.address,
+            Number(templateId),
+            formData.question,
+            arbitratorAddress as Addr,
+            Math.floor(timeoutSec),
+            Math.floor(currentOpeningTs),
+            nonce,
+          ],
+          account: address,
+        });
+      }
 
       // Fire-and-forget: wait for receipt and confirm optimistic questionId
       if (publicClient) {
@@ -418,6 +451,82 @@ export default function CreateQuestion() {
               className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:border-emerald-400/50 focus:bg-white/10 focus:outline-none"
               placeholder="Will ETH price be above $3000 on 2025-01-01?"
               required
+            />
+          </section>
+
+          {/* Outcomes Section (for Multiple Choice) */}
+          {templateId === 3 && (
+            <section>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Answer Choices
+              </label>
+              <div className="space-y-2">
+                {outcomes.map((outcome, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={outcome}
+                      onChange={(e) => {
+                        const newOutcomes = [...outcomes]
+                        newOutcomes[index] = e.target.value
+                        setOutcomes(newOutcomes)
+                      }}
+                      className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:border-emerald-400/50 focus:bg-white/10 focus:outline-none"
+                      placeholder={`Choice ${String.fromCharCode(65 + index)}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newOutcomes = outcomes.filter((_, i) => i !== index)
+                        setOutcomes(newOutcomes)
+                      }}
+                      className="px-3 py-2 rounded-lg border border-red-400/30 bg-red-400/10 text-red-300 hover:bg-red-400/20"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setOutcomes([...outcomes, ''])}
+                  className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                >
+                  Add Choice
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-white/50">
+                Add answer choices for multiple choice questions. Leave empty for other template types.
+              </p>
+            </section>
+          )}
+
+          {/* Category Section */}
+          <section>
+            <label htmlFor="category" className="block text-sm font-medium text-white/80">
+              Category (optional)
+            </label>
+            <input
+              type="text"
+              id="category"
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:border-emerald-400/50 focus:bg-white/10 focus:outline-none"
+              placeholder="e.g., sports, politics, crypto"
+            />
+          </section>
+
+          {/* Metadata URI Section */}
+          <section>
+            <label htmlFor="metadataURI" className="block text-sm font-medium text-white/80">
+              Metadata URI (optional)
+            </label>
+            <input
+              type="text"
+              id="metadataURI"
+              value={formData.metadataURI}
+              onChange={(e) => setFormData({ ...formData, metadataURI: e.target.value })}
+              className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder-white/40 focus:border-emerald-400/50 focus:bg-white/10 focus:outline-none"
+              placeholder="https://example.com/metadata.json"
             />
           </section>
 

@@ -5,11 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d475c4b7-bf8b-498c-adb0-0c9c6b7fadcd" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/subgraph/reality-kaia/abis/RealityERC20.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/subgraph/reality-kaia/schema.graphql" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/subgraph/reality-kaia/src/mapping.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/subgraph/reality-kaia/subgraph.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/subgraph/reality-kaia/schema.graphql" beforeDir="false" afterPath="$PROJECT_DIR$/subgraph/reality-kaia/schema.graphql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/subgraph/reality-kaia/src/mapping.ts" beforeDir="false" afterPath="$PROJECT_DIR$/subgraph/reality-kaia/src/mapping.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,7 +65,7 @@
       <workItem from="1756800364985" duration="9338000" />
       <workItem from="1756879823720" duration="5190000" />
       <workItem from="1756886677304" duration="7100000" />
-      <workItem from="1757119440621" duration="6286000" />
+      <workItem from="1757119440621" duration="7228000" />
     </task>
     <servers />
   </component>

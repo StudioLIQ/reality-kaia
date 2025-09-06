@@ -2,17 +2,26 @@ type Question @entity {
   id: Bytes!
   asker: Bytes!
   templateId: Int!
-  question: String
-  contentHash: Bytes!
-  arbitrator: Bytes!
-  timeout: Int!
+  bondToken: Bytes!
   openingTs: Int!
-  createdTs: BigInt!
+  timeoutSec: Int!
+  contentHash: Bytes
+  createdAt: Int!
+
+  # NEW: fully on-chain metadata
+  content: String!
+  outcomesPacked: String!
+  language: String!
+  category: String!
+  metadataURI: String!
+
+  # status & activity
+  lastAnswerTs: Int
   bestAnswer: Bytes
   bestBond: BigInt
-  bestAnswerer: Bytes
-  lastAnswerTs: BigInt
   finalized: Boolean!
+  pendingArbitration: Boolean!
+  totalAnswers: Int!
   answers: [Answer!]! @derivedFrom(field: "question")
 }
 
