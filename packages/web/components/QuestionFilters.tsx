@@ -107,7 +107,9 @@ export default function QuestionFilters({
     return rows;
   }, [filtered, sortKey, sortDir]);
 
-  useEffect(() => { onChange(sorted); }, [sorted, onChange]);
+  useEffect(() => { 
+    onChange(sorted); 
+  }, [sorted, onChange]);
 
   const toggleStatus = (s: QuestionStatus) =>
     setStatusSet(prev => ({ ...prev, [s]: !prev[s] }));

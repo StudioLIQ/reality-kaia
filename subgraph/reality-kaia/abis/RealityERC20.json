@@ -1,0 +1,43 @@
+{
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
+        { "indexed": true, "internalType": "address", "name": "asker", "type": "address" },
+        { "indexed": false, "internalType": "uint32", "name": "templateId", "type": "uint32" },
+        { "indexed": false, "internalType": "string", "name": "question", "type": "string" },
+        { "indexed": false, "internalType": "bytes32", "name": "contentHash", "type": "bytes32" },
+        { "indexed": false, "internalType": "address", "name": "arbitrator", "type": "address" },
+        { "indexed": false, "internalType": "uint32", "name": "timeout", "type": "uint32" },
+        { "indexed": false, "internalType": "uint32", "name": "openingTs", "type": "uint32" },
+        { "indexed": false, "internalType": "bytes32", "name": "nonce", "type": "bytes32" },
+        { "indexed": false, "internalType": "uint256", "name": "createdTs", "type": "uint256" }
+      ],
+      "name": "LogNewQuestion",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
+        { "indexed": true, "internalType": "bytes32", "name": "answer", "type": "bytes32" },
+        { "indexed": true, "internalType": "address", "name": "answerer", "type": "address" },
+        { "indexed": false, "internalType": "uint256", "name": "bond", "type": "uint256" },
+        { "indexed": false, "internalType": "uint256", "name": "ts", "type": "uint256" }
+      ],
+      "name": "LogNewAnswer",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
+        { "indexed": true, "internalType": "bytes32", "name": "answer", "type": "bytes32" }
+      ],
+      "name": "LogFinalize",
+      "type": "event"
+    }
+  ]
+}
+

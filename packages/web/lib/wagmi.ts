@@ -50,4 +50,5 @@ export const config = createConfig({
     [KAIA_MAINNET_ID]: http(process.env.NEXT_PUBLIC_RPC_MAINNET || 'https://public-en.node.kaia.io'),
     [KAIA_TESTNET_ID]: http(process.env.NEXT_PUBLIC_RPC_TESTNET || 'https://public-en-kairos.node.kaia.io'),
   },
+  ssr: true,
 })

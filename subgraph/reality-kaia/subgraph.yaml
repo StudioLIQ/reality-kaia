@@ -1,0 +1,30 @@
+specVersion: 0.0.6
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: Reality
+    network: kaia-testnet
+    source:
+      address: "0xbbEe32980523c5205B64C74d1c33A3f2585CcD05"
+      abi: Reality
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Question
+        - Answer
+      abis:
+        - name: Reality
+          file: ./abis/RealityERC20.json
+      eventHandlers:
+        - event: LogNewQuestion(bytes32,address,uint32,string,bytes32,address,uint32,uint32,bytes32,uint256)
+          handler: handleLogNewQuestion
+        - event: LogNewAnswer(bytes32,bytes32,address,uint256,uint256)
+          handler: handleLogNewAnswer
+        - event: LogFinalize(bytes32,bytes32)
+          handler: handleLogFinalize
+      file: ./src/mapping.ts
+

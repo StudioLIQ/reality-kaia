@@ -30,6 +30,7 @@ export default function TemplatePicker({
         {items.map(t => (
           <button 
             key={t.id}
+            type="button"
             onClick={() => pick(t.id)}
             className={`text-left rounded-2xl border px-4 py-3 transition-all
               ${t.id === selected 

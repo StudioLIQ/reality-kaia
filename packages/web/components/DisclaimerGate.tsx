@@ -20,6 +20,7 @@ export default function DisclaimerGate({ children }: { children: ReactNode }) {
       <div className="flex items-center gap-3">
         <DisclaimerBadge />
         <button 
+          type="button"
           onClick={open}
           className="px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5 text-xs transition-colors"
           aria-label="Open disclaimer dialog"

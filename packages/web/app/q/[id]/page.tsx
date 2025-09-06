@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEther, parseUnits, formatUnits, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
 import { REALITIO_ABI, ERC20_ABI, resolveBondTokens, type BondToken } from '@/lib/contracts'
@@ -17,9 +17,8 @@ import DisclaimerBadge from '@/components/DisclaimerBadge'
 import DisclaimerGate from '@/components/DisclaimerGate'
 import { TEMPLATES } from '@/lib/templates'
 
-export default function QuestionDetail({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
-  const questionId = resolvedParams.id as `0x${string}`
+export default function QuestionDetail({ params }: { params: { id: string } }) {
+  const questionId = params.id as `0x${string}`
   
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
@@ -54,18 +53,11 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
   const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
   const [wkaiaAmount, setWkaiaAmount] = useState<bigint>(0n)
 
-  useEffect(() => {
-    if (!questionId) return
-    loadQuestion()
-    const interval = setInterval(loadQuestion, 10000) // Refresh every 10 seconds
-    return () => clearInterval(interval)
-  }, [questionId, publicClient, chainId])
-
-  async function loadQuestion() {
+  const loadQuestion = useCallback(async () => {
     if (!publicClient || !questionId) return
     
     try {
-      if (!addr.reality) return
+      if (!addr.reality) { setLoading(false); return }
 
       const questionData = await publicClient.readContract({
         address: addr.reality as `0x${string}`,
@@ -108,7 +100,15 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
     } finally {
       setLoading(false)
     }
-  }
+  }, [publicClient, questionId, addr.reality, deployments, chainId])
+
+  useEffect(() => {
+    if (!questionId) return
+    if (!addr.reality) return
+    loadQuestion()
+    const interval = setInterval(loadQuestion, 10000) // Refresh every 10 seconds
+    return () => clearInterval(interval)
+  }, [questionId, addr.reality, loadQuestion])
 
   // Initialize Permit2 hooks
   const { signPermit2 } = usePermit2({
@@ -149,7 +149,7 @@ export default function QuestionDetail({ params }: { params: Promise<{ id: strin
     }
     
     calculateFeeQuote()
-  }, [answerForm.bond, bondTokenInfo, publicClient, deployments, feeInfo])
+  }, [answerForm.bond, bondTokenInfo, publicClient, deploymentsState, feeInfo])
 
   const handleSubmitAnswer = async () => {
     if (!walletClient || !address || !publicClient || !questionId) return

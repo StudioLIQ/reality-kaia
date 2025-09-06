@@ -1,5 +1,3 @@
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { USDT_MAINNET, WKAIA_MAINNET, WKAIA_TESTNET, type Addr } from './viem'
 import { getDeployments } from './deployments.generated'
 

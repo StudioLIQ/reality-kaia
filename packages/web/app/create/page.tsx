@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAccount, useWalletClient, useChainId, usePublicClient } from 'wagmi'
-import { parseUnits, keccak256, toBytes } from 'viem'
+import { parseUnits, keccak256, toBytes, decodeEventLog } from 'viem'
 import { 
   REALITIO_ERC20_ABI, 
   ERC20_ABI,
@@ -10,13 +10,14 @@ import {
   resolveBondTokensWithStatus,
   calculateFee
 } from '@/lib/contracts'
+import { realityAbi } from '@/lib/abi/reality'
 import { useAddresses } from '@/lib/contracts.client'
 import { USDT_MAINNET, type Addr } from '@/lib/viem'
 import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput, fromNow } from '@/lib/time'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
 import { TOKENS_FOR, type BondToken } from '@/lib/tokens'
 import { quoteFee } from '@/lib/fees'
-import { shouldUseZapper, createQuestionWithZapper } from '@/lib/zapper'
+// Zapper is used for answering flows only; not used for create
 import FeeNotice from '@/components/FeeNotice'
 import TemplatePicker from '@/components/TemplatePicker'
 import TokenSelector from '@/components/TokenSelector'
@@ -24,6 +25,7 @@ import TokenStatusCard from '@/components/TokenStatusCard'
 import DisclaimerGate from '@/components/DisclaimerGate'
 import { getAllowedTemplates } from '@/lib/templates'
 import { useRouter } from 'next/navigation'
+import { bus } from '@/lib/bus'
 
 
 export default function CreateQuestion() {
@@ -57,10 +59,17 @@ export default function CreateQuestion() {
   const [allowance, setAllowance] = useState<bigint>(0n)
   const [checkingAllowance, setCheckingAllowance] = useState(false)
   const [feeInfo, setFeeInfo] = useState<{ feeBps: number; feeRecipient: string } | null>(null)
-  const [contractAddresses, setContractAddresses] = useState<any>(null)
+  // Remove unused state - use addr directly from useAddresses
+  const [showCreateInfo, setShowCreateInfo] = useState(true)
 
   const status = networkStatus(isConnected, chainId)
   const gated = (status === "NOT_CONNECTED" || status === "WRONG_NETWORK")
+  const depsReady = Boolean(addrReady && addr?.reality)
+
+  useEffect(() => {
+    // quick debug to help diagnose route issues
+    console.debug('[create]', { chainId, reality: addr.reality, arbitrator: addr.arbitrator, zapper: addr.zapper });
+  }, [chainId, addr.reality, addr.arbitrator, addr.zapper]);
 
   useEffect(() => {
     const sec = Math.max(1, Math.floor(timeoutInput * unitSeconds[timeoutUnit]))
@@ -70,10 +79,9 @@ export default function CreateQuestion() {
   // Calculate fee when bond amount changes
   useEffect(() => {
     async function calculateFeeQuote() {
+      if (!depsReady) return
       if (!bondToken || !publicClient || !bondAmount) return
-      
       if (!addr.reality) return
-      
       try {
         const bondRaw = parseUnits(bondAmount || '0', bondToken.decimals)
         const quote = await quoteFee({
@@ -88,9 +96,8 @@ export default function CreateQuestion() {
         console.error('Error calculating fee:', err)
       }
     }
-    
     calculateFeeQuote()
-  }, [bondAmount, bondToken?.decimals, bondToken?.address, publicClient, chainId, addr.reality, feeBps])
+  }, [depsReady, bondAmount, bondToken?.decimals, bondToken?.address, publicClient, chainId, addr.reality, feeBps])
 
   // Load fee info from deployments and contract addresses
   useEffect(() => {
@@ -104,19 +111,17 @@ export default function CreateQuestion() {
 
   useEffect(() => {
     async function checkAllowance() {
+      if (!depsReady) return
       if (!bondToken?.address || !address || !publicClient) return
-      
       setCheckingAllowance(true)
       try {
         if (!addr.reality) return
-        
         const allowanceValue = await publicClient.readContract({
           address: bondToken.address,
           abi: ERC20_ABI,
           functionName: 'allowance',
           args: [address, addr.reality as Addr],
         })
-        
         setAllowance(allowanceValue as bigint)
       } catch (err) {
         console.error('Error checking allowance:', err)
@@ -124,12 +129,12 @@ export default function CreateQuestion() {
         setCheckingAllowance(false)
       }
     }
-    
     checkAllowance()
-  }, [bondToken?.address, address, publicClient, chainId, addr.reality])
+  }, [depsReady, bondToken?.address, address, publicClient, chainId, addr.reality])
 
   const handleApprove = async () => {
     if (!walletClient || !bondToken?.address || !address || !bondAmount) return
+    if (!depsReady || !addr.reality) return
     
     setLoading(true)
     setError('')
@@ -147,6 +152,7 @@ export default function CreateQuestion() {
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [addr.reality as Addr, total],
+        account: address,
       })
       
       // Wait for transaction confirmation
@@ -168,6 +174,7 @@ export default function CreateQuestion() {
   }
 
   const checkAllowance = async () => {
+    if (!depsReady) return
     if (!bondToken?.address || !address || !publicClient) return
     
     try {
@@ -207,97 +214,118 @@ export default function CreateQuestion() {
     setError('')
 
     try {
-      if (!addr.reality) {
+      if (!addr.reality || !depsReady) {
         throw new Error('Contract addresses not found')
       }
 
       const randomValue = crypto.getRandomValues(new Uint8Array(32))
       const nonce = keccak256(randomValue)
       
-      const arbitratorAddress = formData.arbitrator || addr.arbitrator || contractAddresses?.arbitratorSimple
-      const currentOpeningTs = useNow ? Math.floor(Date.now() / 1000) : openingTs
+      const arbitratorAddress = formData.arbitrator || addr.arbitrator || deployments?.arbitratorSimple
+      // Contract requires openingTs >= block.timestamp OR 0. For "Now", pass 0 to avoid race.
+      const currentOpeningTs = useNow ? 0 : openingTs
 
-      // Check if we should use Zapper for WKAIA
-      const useZapper = await shouldUseZapper(bondToken, publicClient, address)
-      
-      let hash: `0x${string}`
-      
-      if (useZapper && bondToken.label === 'WKAIA') {
-        // Use Zapper to convert native KAIA to WKAIA
-        const zapperAddress = addr.zapper || deployments?.zapperWKAIA
-        
-        if (!zapperAddress) {
-          // Fallback to regular flow if Zapper not available
-          hash = await walletClient.writeContract({
-            address: addr.reality as Addr,
-            abi: REALITIO_ERC20_ABI,
-            functionName: 'askQuestionERC20',
-            args: [
-              bondToken.address,
-              Number(templateId),
-              formData.question,
-              arbitratorAddress as Addr,
-              timeoutSec,
-              currentOpeningTs,
-              nonce,
+      // Compute deterministic questionId (optimistic UI). Dynamic import avoids module issues.
+      let computedQid: `0x${string}` | null = null
+      try {
+        const { encodeAbiParameters } = await import('viem')
+        computedQid = keccak256(
+          encodeAbiParameters(
+            [
+              { type: 'uint32' },
+              { type: 'bytes32' },
+              { type: 'address' },
+              { type: 'uint32' },
+              { type: 'uint32' },
+              { type: 'bytes32' },
+              { type: 'address' },
             ],
-          })
-        } else {
-          hash = await createQuestionWithZapper({
-            publicClient,
-            walletClient,
-            zapperAddress: zapperAddress as Addr,
-            realitioAddress: addr.reality as Addr,
-            bondToken: bondToken.address,
-            bondAmount,
-            templateId: Number(templateId),
-            question: formData.question,
-            arbitrator: arbitratorAddress as Addr,
-            timeout: timeoutSec,
-            openingTs: currentOpeningTs,
-            nonce: BigInt(nonce),
-            account: address,
-          })
+            [
+              Number(templateId),
+              keccak256(toBytes(formData.question)),
+              arbitratorAddress as Addr,
+              Math.floor(timeoutSec),
+              Math.floor(currentOpeningTs),
+              nonce,
+              address,
+            ]
+          )
+        ) as `0x${string}`
+      } catch {}
+
+      // Emit optimistic question creation immediately and persist in storage for next page
+      if (computedQid) bus.emit({ chainId, questionId: computedQid })
+      try {
+        const key = 'oo:new-questions'
+        const raw = localStorage.getItem(key)
+        const list = raw ? JSON.parse(raw) as Array<{chainId:number;questionId:`0x${string}`}> : []
+        if (computedQid) list.unshift({ chainId, questionId: computedQid })
+        localStorage.setItem(key, JSON.stringify(list.slice(0, 50)))
+        // Also set a one-time flash message for the dashboard
+        const flashKey = 'oo:flash'
+        if (computedQid) {
+          const short = `${computedQid.slice(0,10)}...`
+          localStorage.setItem(flashKey, JSON.stringify({
+            message: `Question created: ${short}`,
+            href: `/q/${computedQid}`,
+            label: 'View'
+          }))
         }
-      } else {
-        // Regular ERC20 flow
-        hash = await walletClient.writeContract({
-          address: addr.reality as Addr,
-          abi: REALITIO_ERC20_ABI,
-          functionName: 'askQuestionERC20',
-          args: [
-            bondToken.address,
-            Number(templateId),
-            formData.question,
-            arbitratorAddress as Addr,
-            timeoutSec,
-            currentOpeningTs,
-            nonce,
-          ],
-        })
+      } catch {}
+
+      // Always call Reality directly for creation
+      const hash = await walletClient.writeContract({
+        address: addr.reality as Addr,
+        abi: REALITIO_ERC20_ABI,
+        functionName: 'askQuestionERC20',
+        args: [
+          bondToken.address,
+          Number(templateId),
+          formData.question,
+          arbitratorAddress as Addr,
+          Math.floor(timeoutSec),
+          Math.floor(currentOpeningTs),
+          nonce,
+        ],
+        account: address,
+      })
+
+      // Fire-and-forget: wait for receipt and confirm optimistic questionId
+      if (publicClient) {
+        (async () => {
+          try {
+            const receipt = await publicClient.waitForTransactionReceipt({ hash })
+            // Decode questionId from logs robustly: filter by contract + event topic
+            let qid: `0x${string}` | null = null
+            const targetAddr = (addr.reality as string).toLowerCase()
+            const topicNewQuestion = keccak256(toBytes('LogNewQuestion(bytes32,address,uint32,string,bytes32,address,uint32,uint32,bytes32,uint256)'))
+            for (const log of receipt.logs) {
+              const matchesAddr = (log.address || '').toLowerCase() === targetAddr
+              const isNewQ = Array.isArray(log.topics) && log.topics[0] === topicNewQuestion
+              if (!matchesAddr || !isNewQ) continue
+              // topics[1] is indexed questionId
+              if (log.topics[1]) { qid = log.topics[1] as `0x${string}`; break }
+              // As a fallback, try decode with minimal ABI
+              try {
+                const decoded = decodeEventLog({ abi: realityAbi as any, data: log.data, topics: log.topics }) as any
+                if (decoded?.eventName === 'LogNewQuestion' && decoded?.args?.questionId) {
+                  qid = decoded.args.questionId as `0x${string}`
+                  break
+                }
+              } catch {}
+            }
+            if (qid) bus.emit({ chainId, questionId: qid })
+          } catch {}
+        })()
       }
 
-      router.push('/')
+      router.push('/dashboard')
     } catch (err: any) {
       console.error('Error creating question:', err)
       setError(err.message || 'Failed to create question')
     } finally {
       setLoading(false)
     }
-  }
-
-  // Loading and error guards
-  if (addrLoading) return <div className="mx-auto max-w-6xl px-4 py-6 opacity-70">Loading network deployments…</div>;
-  if (addrError || !addrReady) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-300">
-          Missing deployment info for chain {chainId}. Ensure 
-          <code className="mx-1 px-1 rounded bg-black/40">/deployments/{chainId}.json</code>
-          exists in <code className="px-1 rounded bg-black/40">packages/web/public/deployments</code>.
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -311,6 +339,30 @@ export default function CreateQuestion() {
         <p className="mt-2 text-sm text-white/60">Submit a question to the oracle network</p>
         </div>
 
+      {!addrLoading && (addrError || !addrReady) && (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-300">
+          Missing deployment info for chain {chainId}. Ensure 
+          <code className="mx-1 px-1 rounded bg-black/40">/deployments/{chainId}.json</code>
+          exists in <code className="px-1 rounded bg-black/40">packages/web/public/deployments</code>.
+        </div>
+      )}
+
+      {showCreateInfo && (
+        <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70 flex items-start justify-between">
+          <p>
+            Creating a question does not transfer tokens. Approvals only set allowance; tokens are transferred when an answer is submitted with a bond.
+          </p>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setShowCreateInfo(false)}
+            className="ml-3 inline-flex items-center justify-center rounded-md px-2 py-1 text-white/50 hover:text-white/80 hover:bg-white/10"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {gated && (
           <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
           Please connect KaiaWallet to the correct network (Mainnet {KAIA_MAINNET_ID} or Kairos {KAIA_TESTNET_ID}).
@@ -319,7 +371,7 @@ export default function CreateQuestion() {
 
       {/* Form card */}
       <div className="rounded-2xl border border-white/10 bg-neutral-950 p-6">
-        <form onSubmit={handleSubmit} className={`space-y-6 ${gated ? 'pointer-events-none opacity-50' : ''}`}>
+        <form onSubmit={handleSubmit} className={`space-y-6 ${(gated || !depsReady) ? 'pointer-events-none opacity-50' : ''}`}>
           {/* Bond Token Section */}
           <section className="space-y-2">
             <label className="block text-sm font-medium text-white/80">
@@ -411,6 +463,9 @@ export default function CreateQuestion() {
                 feeRecipient={feeInfo.feeRecipient as `0x${string}`}
               />
             )}
+            <p className="mt-2 text-xs text-white/50">
+              Note: Creating a question does not transfer tokens. Approve only sets allowance; tokens move when an answer is submitted with a bond.
+            </p>
           </section>
 
           {/* Timeout Section */}
@@ -485,11 +540,11 @@ export default function CreateQuestion() {
           </section>
 
           {/* Token Status Card */}
-          {bondToken && bondAmount && isConnected && contractAddresses && (
+          {bondToken && bondAmount && isConnected && addr.reality && (
             <TokenStatusCard
               token={bondToken}
               requiredAmount={feeQuote?.totalFormatted || bondAmount}
-              contractAddress={contractAddresses.realitioERC20 as `0x${string}`}
+              contractAddress={addr.reality as `0x${string}`}
               onApprove={handleApprove}
               approving={loading}
             />
@@ -507,14 +562,24 @@ export default function CreateQuestion() {
                   !templateId || 
                   !bondAmount ||
                   parseFloat(bondAmount) <= 0 ||
-                  allowance === BigInt(0) || 
+                  (bondToken?.label !== 'WKAIA' && allowance === BigInt(0)) || 
                   gated || 
                   (bondToken && !bondToken.active)
                 }
-                className="inline-flex items-center px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-busy={loading ? 'true' : 'false'}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Creating...' : 'Create Question'}
+                {loading && (
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4A4 4 0 004 12z"/>
+                  </svg>
+                )}
+                <span>{loading ? 'Creating…' : 'Create Question'}</span>
               </button>
+              <p className="text-xs text-white/50 md:text-right">
+                No tokens move on creation; spending occurs on answer.
+              </p>
             </div>
           </DisclaimerGate>
 
