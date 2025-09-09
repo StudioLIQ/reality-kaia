@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {RealitioERC20V2} from "../src/oracles/Reality/RealitioERC20V2.sol";
+import {RealitioERC20V3} from "../src/oracles/Reality/RealitioERC20V3.sol";
 import {ArbitratorSimple} from "../src/ArbitratorSimple.sol";
 import {MockUSDT} from "../src/tokens/MockUSDT.sol";
 import {ZapperWKAIA} from "../src/zapper/ZapperWKAIA.sol";
@@ -45,9 +45,9 @@ contract DeployAll is Script {
             console2.log("MockUSDT (tUSDT) deployed at:", mockUSDT);
         }
 
-        // Deploy RealitioERC20V2 with fee configuration and Permit2
-        RealitioERC20V2 realitio = new RealitioERC20V2(feeRecipient, feeBps, permit2);
-        console2.log("RealitioERC20V2 deployed at:", address(realitio));
+        // Deploy RealitioERC20V3 with fee configuration and Permit2
+        RealitioERC20V3 realitio = new RealitioERC20V3(feeRecipient, feeBps, permit2);
+        console2.log("RealitioERC20V3 deployed at:", address(realitio));
         console2.log("  Fee recipient:", feeRecipient);
         console2.log("  Fee BPS:", feeBps);
         console2.log("  Permit2:", permit2);

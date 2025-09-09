@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 export type DeploymentSchema = {
   realitioERC20?: `0x${string}`;
+  RealitioERC20?: `0x${string}`;  // Support both naming conventions
   arbitratorSimple?: `0x${string}`;
   zapperWKAIA?: `0x${string}`;
   MockUSDT?: `0x${string}`;
@@ -55,7 +56,7 @@ export function useNetworkDeployments(defaultChain = 8217) {
     return () => { alive = false; };
   }, [chainId]);
 
-  const ready = !!data?.realitioERC20;
+  const ready = !!(data?.realitioERC20 || data?.RealitioERC20);
   const error = !loading && !ready;
   return { chainId, deployments: data, ready, loading, error };
 }

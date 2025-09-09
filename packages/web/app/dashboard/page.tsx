@@ -3,8 +3,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { formatEther } from "viem";
 import { useAddresses } from "@/lib/contracts.client";
-import { useQuestions as useQuestionsChain } from "@/lib/useQuestions";
-import { useQuestionsSubgraph } from "@/lib/useQuestionsSubgraph";
+import { useOnchainQuestions } from "@/lib/useOnchainQuestions";
 import QuestionFilters, { type QuestionRow } from "@/components/QuestionFilters";
 import StatCard from "@/components/StatCard";
 import { DataTable, Th, Td, TRow } from "@/components/DataTable";
@@ -13,8 +12,7 @@ import FlashBanner from "@/components/FlashBanner";
 
 export default function DashboardPage() {
   const { chainId, addr, ready: addrReady, loading: addrLoading, error: addrError } = useAddresses();
-  const useQ = process.env.NEXT_PUBLIC_SUBGRAPH_URL ? useQuestionsSubgraph : useQuestionsChain;
-  const { items, loading, error } = useQ();
+  const { total, page, setPage, pageSize, rows: items, loading, err: error } = useOnchainQuestions(20);
 
   // map to QuestionRow shape filters expect
   const rows: QuestionRow[] = useMemo(() => items.map((q) => ({
@@ -23,10 +21,10 @@ export default function DashboardPage() {
     createdAt: q.createdAt,
     openingTs: q.openingTs,
     timeoutSec: q.timeoutSec,
-    finalized: false,
+    finalized: q.finalized,
     bondTokenSymbol: undefined,
-    currentBondRaw: undefined,
-    text: q.question,
+    currentBondRaw: q.bestBond || undefined,
+    text: q.content,
   })), [items]);
 
   const [filtered, setFiltered] = useState<QuestionRow[]>([]);
@@ -172,6 +170,29 @@ export default function DashboardPage() {
             })}
           </tbody>
         </DataTable>
+      )}
+
+      {/* Pagination */}
+      {total > pageSize && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <button
+            onClick={() => setPage(Math.max(0, page - 1))}
+            disabled={page === 0}
+            className="px-4 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-white/80 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <span className="text-white/60 text-sm px-4">
+            Page {page + 1} of {Math.ceil(total / pageSize)}
+          </span>
+          <button
+            onClick={() => setPage(Math.min(Math.ceil(total / pageSize) - 1, page + 1))}
+            disabled={page >= Math.ceil(total / pageSize) - 1}
+            className="px-4 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-white/80 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       )}
     </div>
   );

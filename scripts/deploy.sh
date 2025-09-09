@@ -69,7 +69,7 @@ if [[ "$CHAIN_ID" == "1001" ]]; then
   # Testnet with MockUSDT
   cat > "deployments/${CHAIN_ID}.json" <<EOF
 {
-  "realitioERC20": "$REALITIO",
+  "RealitioERC20": "$REALITIO",
   "arbitratorSimple": "$ARBITRATOR",
   "zapperWKAIA": "$ZAPPER",
   "MockUSDT": "$MOCK_USDT",
@@ -84,7 +84,7 @@ else
   # Mainnet with real USDT
   cat > "deployments/${CHAIN_ID}.json" <<EOF
 {
-  "realitioERC20": "$REALITIO",
+  "RealitioERC20": "$REALITIO",
   "arbitratorSimple": "$ARBITRATOR",
   "zapperWKAIA": "$ZAPPER",
   "USDT": "$USDT_MAINNET",
@@ -99,9 +99,11 @@ fi
 DEPLOY_JSON="deployments/${CHAIN_ID}.json"
 [[ -f "$DEPLOY_JSON" ]] || { echo "[deploy] ERROR: $DEPLOY_JSON not found"; exit 1; }
 
-# FE 반영
-mkdir -p packages/web/public/deployments
-cp "$DEPLOY_JSON" "packages/web/public/deployments/${CHAIN_ID}.json"
+# Copy deployment JSON to web/public  
+WEB_DEPLOY_DIR="packages/web/public/deployments"
+mkdir -p "$WEB_DEPLOY_DIR"
+cp "$DEPLOY_JSON" "$WEB_DEPLOY_DIR/${CHAIN_ID}.json"
+echo "[deploy] Copied to $WEB_DEPLOY_DIR/${CHAIN_ID}.json"
 
 mkdir -p packages/web/lib
 cat > packages/web/lib/deployments.generated.ts <<'TS'

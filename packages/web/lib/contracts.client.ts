@@ -8,7 +8,7 @@ export function useAddresses() {
     chainId,
     deployments,
     addr: {
-      reality: deployments?.realitioERC20 as `0x${string}` | undefined,
+      reality: (deployments?.RealitioERC20 || deployments?.realitioERC20) as `0x${string}` | undefined,
       arbitrator: deployments?.arbitratorSimple as `0x${string}` | undefined,
       zapper: deployments?.zapperWKAIA as `0x${string}` | undefined,
       usdt:    deployments?.USDT || deployments?.MockUSDT as `0x${string}` | undefined,

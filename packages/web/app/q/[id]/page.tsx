@@ -5,6 +5,7 @@ import { useAccount, useWalletClient, usePublicClient, useChainId } from 'wagmi'
 import { formatEther, parseEther, parseUnits, formatUnits, keccak256, toHex, pad, encodeAbiParameters, parseAbiParameters } from 'viem'
 import { REALITIO_ABI, ERC20_ABI, resolveBondTokens, type BondToken } from '@/lib/contracts'
 import { realityV2Abi } from '@/lib/abi/realityV2'
+import { realityV3Abi } from '@/lib/abi/realityV3'
 import { useAddresses } from '@/lib/contracts.client'
 import { CHAIN_LABEL } from '@/lib/viem'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
@@ -18,8 +19,12 @@ import DisclaimerBadge from '@/components/DisclaimerBadge'
 import DisclaimerGate from '@/components/DisclaimerGate'
 import { TEMPLATES } from '@/lib/templates'
 
-export default function QuestionDetail({ params }: { params: { id: string } }) {
-  const questionId = params.id as `0x${string}`
+export default function QuestionDetail(props: { params: Promise<{ id: string }> }) {
+  const [questionId, setQuestionId] = useState<`0x${string}` | null>(null)
+  
+  useEffect(() => {
+    props.params.then(p => setQuestionId(p.id as `0x${string}`))
+  }, [props.params])
   
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
@@ -61,44 +66,90 @@ export default function QuestionDetail({ params }: { params: { id: string } }) {
     try {
       if (!addr.reality) { setLoading(false); return }
 
-      // Try to get V2 metadata first, fallback to V1
+      // Try to get V3 metadata first, then V2, then V1
       let questionData: any
       let metadata: any = null
       
       try {
-        // Try V2 getQuestionFull which returns full metadata
-        const v2Data = await publicClient.readContract({
+        // Try V3 getQuestionFullV3 which returns full metadata with runtime
+        const v3Data = await publicClient.readContract({
           address: addr.reality as `0x${string}`,
-          abi: realityV2Abi as any,
-          functionName: 'getQuestionFull',
+          abi: realityV3Abi as any,
+          functionName: 'getQuestionFullV3',
           args: [questionId],
-        })
+        }) as any
         
-        questionData = v2Data
+        // V3 returns a struct with all fields
         metadata = {
-          asker: v2Data[0],
-          arbitrator: v2Data[1],
-          bondToken: v2Data[2],
-          templateId: v2Data[3],
-          timeout: v2Data[4],
-          openingTs: v2Data[5],
-          contentHash: v2Data[6],
-          createdAt: v2Data[7],
-          content: v2Data[8],
-          outcomesPacked: v2Data[9],
-          language: v2Data[10],
-          category: v2Data[11],
-          metadataURI: v2Data[12],
+          asker: v3Data.asker,
+          arbitrator: v3Data.arbitrator,
+          bondToken: v3Data.bondToken,
+          templateId: v3Data.templateId,
+          timeout: v3Data.timeout,
+          openingTs: v3Data.openingTs,
+          contentHash: v3Data.contentHash,
+          createdAt: v3Data.createdAt,
+          content: v3Data.content,
+          outcomesPacked: v3Data.outcomesPacked,
+          language: v3Data.language,
+          category: v3Data.category,
+          metadataURI: v3Data.metadataURI,
+          lastAnswerTs: v3Data.lastAnswerTs,
+          bestAnswer: v3Data.bestAnswer,
+          bestBond: v3Data.bestBond,
+          finalized: v3Data.finalized,
+          pendingArbitration: v3Data.pendingArbitration,
         }
-      } catch (error) {
-        // Fallback to V1
-        console.log('V2 failed, using V1:', error)
-        questionData = await publicClient.readContract({
-          address: addr.reality as `0x${string}`,
-          abi: REALITIO_ABI,
-          functionName: 'getQuestion',
-          args: [questionId],
-        })
+        
+        // Map to legacy format for compatibility
+        questionData = [
+          v3Data.arbitrator,
+          v3Data.bondToken,
+          v3Data.timeout,
+          v3Data.openingTs,
+          v3Data.contentHash,
+          v3Data.bestAnswer,
+          v3Data.bestBond,
+          '0x0000000000000000000000000000000000000000', // bestAnswerer not in V3, use zero address
+          v3Data.lastAnswerTs,
+          v3Data.finalized,
+        ]
+      } catch (v3Error) {
+        try {
+          // Try V2 getQuestionFull
+          const v2Data = await publicClient.readContract({
+            address: addr.reality as `0x${string}`,
+            abi: realityV2Abi as any,
+            functionName: 'getQuestionFull',
+            args: [questionId],
+          }) as any
+          
+          questionData = v2Data
+          metadata = {
+            asker: v2Data[0],
+            arbitrator: v2Data[1],
+            bondToken: v2Data[2],
+            templateId: v2Data[3],
+            timeout: v2Data[4],
+            openingTs: v2Data[5],
+            contentHash: v2Data[6],
+            createdAt: v2Data[7],
+            content: v2Data[8],
+            outcomesPacked: v2Data[9],
+            language: v2Data[10],
+            category: v2Data[11],
+            metadataURI: v2Data[12],
+          }
+        } catch (v2Error) {
+          // Fallback to V1
+          console.log('V3/V2 failed, using V1:', v2Error)
+          questionData = await publicClient.readContract({
+            address: addr.reality as `0x${string}`,
+            abi: REALITIO_ABI,
+            functionName: 'getQuestion',
+            args: [questionId],
+          })
+        }
       }
 
       const questionInfo = {
