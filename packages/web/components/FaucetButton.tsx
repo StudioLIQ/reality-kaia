@@ -79,6 +79,24 @@ export default function FaucetButton() {
     setError("");
     setSuccess(false);
 
+    // Helper: detect user-cancelled tx across wallets/providers
+    const isUserRejected = (e: any) => {
+      const code = e?.code ?? e?.cause?.code;
+      const name = e?.name || e?.cause?.name;
+      const msg = (e?.shortMessage || e?.message || "").toLowerCase();
+      return (
+        code === 4001 || // EIP-1193 userRejectedRequest
+        name === "UserRejectedRequestError" ||
+        msg.includes("user rejected") ||
+        msg.includes("rejected the request") ||
+        msg.includes("user denied") ||
+        msg.includes("denied transaction") ||
+        msg.includes("request rejected") ||
+        msg.includes("user canceled") ||
+        msg.includes("user cancelled")
+      );
+    };
+
     try {
       // Check last mint timestamp (24 hour cooldown)
       const lastMintTimestamp = await publicClient.readContract({
@@ -113,7 +131,11 @@ export default function FaucetButton() {
       setTimeout(() => setSuccess(false), 5000);
     } catch (err: any) {
       console.error("Faucet error:", err);
-      
+      // Silently ignore user-cancelled transactions
+      if (isUserRejected(err)) {
+        return;
+      }
+
       // If mintDaily function fails, try direct mint function as fallback
       if (err.message?.includes("mintDaily") || err.message?.includes("once per day")) {
         try {
@@ -130,6 +152,9 @@ export default function FaucetButton() {
           setTimeout(() => setSuccess(false), 5000);
           return;
         } catch (mintErr: any) {
+          if (isUserRejected(mintErr)) {
+            return;
+          }
           setError(mintErr.message || "Failed to get test tokens");
         }
       } else {
