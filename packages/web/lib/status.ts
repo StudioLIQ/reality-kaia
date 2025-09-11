@@ -21,10 +21,18 @@ export function deriveStatus(q: any, nowSec: number): QuestionStatus {
   return "OPEN";
 }
 
-/** Deadline ≈ openingTs + timeoutSec (0 if missing) */
+/**
+ * Compute a displayable deadline in unix seconds.
+ * Primary: openingTs + timeoutSec
+ * Fallbacks: if openingTs is 0/missing, use createdAt/createdTs/lastAnswerTs.
+ */
 export function computeDeadline(q: any): number {
-  const o = Number(q.openingTs || 0);
-  const t = Number(q.timeoutSec || q.timeout || 0);
-  if (!o || !t) return 0;
-  return o + t;
+  const t = Number(q?.timeoutSec ?? q?.timeout ?? 0);
+  // pick the first meaningful timestamp available
+  const base = Number(
+    (q?.openingTs && Number(q.openingTs) !== 0 ? q.openingTs :
+     q?.createdAt ?? q?.createdTs ?? q?.lastAnswerTs ?? 0)
+  );
+  if (!t || !base) return 0;
+  return base + t;
 }

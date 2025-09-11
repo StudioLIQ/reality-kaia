@@ -47,13 +47,14 @@ const CHAIN_ID = Number(process.env.CHAIN_ID || '1001')
 const RPC_URL = process.env.RPC_URL || (CHAIN_ID === 8217
   ? process.env.NEXT_PUBLIC_RPC_MAINNET || 'https://public-en.node.kaia.io'
   : process.env.NEXT_PUBLIC_RPC_TESTNET || 'https://public-en-kairos.node.kaia.io')
+const DRY_RUN = process.env.DRY_RUN === '1' || process.argv.includes('--dry-run')
 const PK = process.env.PRIVATE_KEY
 const CLI_TOKEN = (process.argv.find(a => a.startsWith('--token=')) || '').split('=')[1]
 const TOKEN_PREF = (process.env.BOND_TOKEN || CLI_TOKEN || 'USDT').toUpperCase()
 const TOKEN_ADDR_OVERRIDE = process.env.BOND_TOKEN_ADDRESS
 
-if (!PK) {
-  console.error('Missing PRIVATE_KEY env. Export PRIVATE_KEY=0x... and re-run.')
+if (!PK && !DRY_RUN) {
+  console.error('Missing PRIVATE_KEY env. Export PRIVATE_KEY=0x... or use DRY_RUN=1/--dry-run for a read-only check.')
   process.exit(1)
 }
 
@@ -102,6 +103,43 @@ const ABI = [
       ]
     }]
   },
+  // V3 registry helpers
+  {
+    type: 'function', name: 'totalQuestions', stateMutability: 'view',
+    inputs: [], outputs: [{ type: 'uint256' }]
+  },
+  {
+    type: 'function', name: 'getQuestionsDesc', stateMutability: 'view',
+    inputs: [ { type: 'uint256', name: 'offset' }, { type: 'uint256', name: 'limit' } ],
+    outputs: [{ type: 'bytes32[]' }]
+  },
+  {
+    type: 'function', name: 'getQuestionFullBatch', stateMutability: 'view',
+    inputs: [ { type: 'bytes32[]', name: 'questionIds' } ],
+    outputs: [{
+      type: 'tuple[]', components: [
+        // QuestionFullV3
+        { type: 'address', name: 'asker' },
+        { type: 'address', name: 'arbitrator' },
+        { type: 'address', name: 'bondToken' },
+        { type: 'uint32',  name: 'templateId' },
+        { type: 'uint32',  name: 'timeout' },
+        { type: 'uint32',  name: 'openingTs' },
+        { type: 'bytes32', name: 'contentHash' },
+        { type: 'uint64',  name: 'createdAt' },
+        { type: 'string',  name: 'content' },
+        { type: 'string',  name: 'outcomesPacked' },
+        { type: 'string',  name: 'language' },
+        { type: 'string',  name: 'category' },
+        { type: 'string',  name: 'metadataURI' },
+        { type: 'uint64',  name: 'lastAnswerTs' },
+        { type: 'bytes32', name: 'bestAnswer' },
+        { type: 'uint256', name: 'bestBond' },
+        { type: 'bool',    name: 'finalized' },
+        { type: 'bool',    name: 'pendingArbitration' },
+      ]
+    }]
+  },
   {
     type: 'event', name: 'LogNewQuestion',
     inputs: [
@@ -124,28 +162,37 @@ function outcomesJoin(arr) {
   return Array.isArray(arr) ? arr.join('\u001F') : ''
 }
 
-// Deterministic nonce so the same example question is idempotent across runs.
-const NONCE_SALT = 'oo:examples:v1'
-function deterministicNonce(q, arbitrator, timeout, openingTs) {
+// Deterministic nonce scoped to template+content only, so seeding stays stable
+// even if outcomes/category/timeout/arbitrator change between runs.
+const NONCE_SALT = process.env.SEED_NONCE_SALT || 'oo:examples:v1'
+function deterministicNonceStable(templateId, contentHash) {
   return keccak256(encodeAbiParameters([
     { type: 'uint32' },   // templateId
     { type: 'bytes32' },  // contentHash
-    { type: 'string' },   // outcomesPacked
-    { type: 'address' },  // arbitrator
-    { type: 'uint32' },   // timeout
-    { type: 'uint32' },   // openingTs
-    { type: 'string' },   // category
     { type: 'string' },   // salt
   ], [
-    q.templateId,
-    keccak256(toBytes(q.content)),
-    outcomesJoin(q.outcomes),
-    arbitrator,
-    timeout,
-    openingTs,
-    q.category || '',
+    templateId,
+    contentHash,
     NONCE_SALT,
   ]))
+}
+
+async function findExistingByContent(publicClient, reality, content) {
+  try {
+    const total = await publicClient.readContract({ address: reality, abi: ABI, functionName: 'totalQuestions', args: [] })
+    const page = 200
+    for (let offset = 0; offset < Number(total); offset += page) {
+      const ids = await publicClient.readContract({ address: reality, abi: ABI, functionName: 'getQuestionsDesc', args: [offset, page] })
+      if (!ids || ids.length === 0) break
+      const batch = await publicClient.readContract({ address: reality, abi: ABI, functionName: 'getQuestionFullBatch', args: [ids] })
+      for (let i = 0; i < batch.length; i++) {
+        if ((batch[i]?.content || '') === content) {
+          return ids[i]
+        }
+      }
+    }
+  } catch {}
+  return null
 }
 
 async function main() {
@@ -164,69 +211,69 @@ async function main() {
     process.exit(1)
   }
 
-  const account = privateKeyToAccount(PK.startsWith('0x') ? PK : `0x${PK}`)
+  const account = PK ? privateKeyToAccount(PK.startsWith('0x') ? PK : `0x${PK}`) : null
   const publicClient = createPublicClient({ transport: http(RPC_URL) })
-  const walletClient = createWalletClient({ account, transport: http(RPC_URL) })
+  const walletClient = account ? createWalletClient({ account, transport: http(RPC_URL) }) : null
 
   const Q = [
     // Template 1: Binary (BTC)
     {
       templateId: 1,
-      content: 'Did BTC-USD trade at or above $70,000 on Coinbase between 2025-03-01 00:00:00 UTC and 2025-03-31 23:59:59 UTC?\nAnswers: YES/NO',
+      content: 'Will BTC-USD trade at or above $80,000 on Coinbase between 2025-10-01 00:00:00 UTC and 2025-12-31 23:59:59 UTC?\nAnswers: YES/NO',
       outcomes: [], category: 'Markets',
     },
     // Template 1: Binary (Sports)
     {
       templateId: 1,
-      content: 'Did Spain win the UEFA Euro 2024 Final in regular time against England on 2024-07-14?\nAnswers: YES/NO',
+      content: 'Will the Kansas City Chiefs win Super Bowl LX (2026-02-08)?\nAnswers: YES/NO',
       outcomes: [], category: 'Sports',
     },
     // Template 3: Multiple Choice (BTC)
     {
       templateId: 3,
-      content: 'What was BTC-USD\'s 24h performance on Coinbase on 2025-03-15 (close-to-close, nearest 0.1%)?\nChoices: A) Up 5%+, B) Up 0–5%, C) Flat (±0.5%), D) Down 0–5%, E) Down 5%+',
+      content: 'What will be BTC-USD\'s 24h performance on Coinbase on 2025-12-15 (close-to-close, nearest 0.1%)?\nChoices: A) Up 5%+, B) Up 0–5%, C) Flat (±0.5%), D) Down 0–5%, E) Down 5%+',
       outcomes: ['Up 5%+', 'Up 0–5%', 'Flat (±0.5%)', 'Down 0–5%', 'Down 5%+'], category: 'Markets',
     },
     // Template 3: Multiple Choice (Sports)
     {
       templateId: 3,
-      content: 'Who won the 2024 NBA Finals?\nChoices: A) Boston Celtics, B) Dallas Mavericks',
+      content: 'Who will win the 2026 NBA Finals?\nChoices: A) Boston Celtics, B) Dallas Mavericks',
       outcomes: ['Boston Celtics', 'Dallas Mavericks'], category: 'Sports',
     },
     // Template 4: Integer (BTC)
     {
       templateId: 4,
-      content: 'What was the BTC-USD price on Coinbase at 2025-03-15 12:00:00 UTC? (answer = integer USD, rounded to nearest dollar)',
+      content: 'What will be the BTC-USD price on Coinbase at 2025-12-15 12:00:00 UTC? (answer = integer USD, rounded to nearest dollar)',
       outcomes: [], category: 'Markets',
     },
     // Template 4: Integer (Sports)
     {
       templateId: 4,
-      content: 'How many total goals were scored in the 2024 UEFA Champions League Final (Real Madrid vs Borussia Dortmund on 2024-06-01)? (answer = integer, unit=goals)',
+      content: 'How many total goals will be scored in the 2026 UEFA Champions League Final (on 2026-06-01)? (answer = integer, unit=goals)',
       outcomes: [], category: 'Sports',
     },
     // Template 5: Datetime (BTC)
     {
       templateId: 5,
-      content: 'When did BTC-USD first trade above $70,000 on Coinbase after 2025-03-01 00:00:00 UTC? (answer = unix seconds, UTC)',
+      content: 'When will BTC-USD first trade above $100,000 on Coinbase after 2025-10-01 00:00:00 UTC? (answer = unix seconds, UTC)',
       outcomes: [], category: 'Markets',
     },
     // Template 5: Datetime (Sports)
     {
       templateId: 5,
-      content: 'What was the official kickoff time (UTC) of Super Bowl LVIII (Kansas City Chiefs vs San Francisco 49ers on 2024-02-11)? (answer = unix seconds, UTC)',
+      content: 'What will be the official kickoff time (UTC) of Super Bowl LX (2026-02-08)? (answer = unix seconds, UTC)',
       outcomes: [], category: 'Sports',
     },
     // Template 7: Text (hash) (BTC)
     {
       templateId: 7,
-      content: 'What is the Coinbase ticker symbol used for bitcoin quoted in USD? (answer = uppercase ticker; verify via keccak256(lowercase(trimmed)))',
+      content: 'What will be the ticker symbol of the next asset Coinbase lists after 2025-10-01? (answer = uppercase ticker; verify via keccak256(lowercase(trimmed)))',
       outcomes: [], category: 'Markets',
     },
     // Template 7: Text (hash) (Sports)
     {
       templateId: 7,
-      content: 'Who was awarded Super Bowl LVIII MVP? (answer = full name per NFL.com; verify via keccak256(lowercase(trimmed)))',
+      content: 'Who will be awarded Super Bowl LX MVP? (answer = full name per NFL.com; verify via keccak256(lowercase(trimmed)))',
       outcomes: [], category: 'Sports',
     },
   ]
@@ -236,13 +283,14 @@ async function main() {
   const language = 'en'
   const metadataURI = ''
 
-  console.log(`Seeding ${Q.length} questions on chain ${CHAIN_ID} using ${account.address}`)
+  console.log(`${DRY_RUN ? 'Dry-run for' : 'Seeding'} ${Q.length} questions on chain ${CHAIN_ID} ${account ? 'using ' + account.address : ''}`)
   console.log(`Reality: ${reality}`)
   console.log(`Bond Token: ${bondToken} (${TOKEN_PREF}${TOKEN_ADDR_OVERRIDE ? ' / override' : ''})`)
 
   for (const [i, q] of Q.entries()) {
     const outcomesPacked = outcomesJoin(q.outcomes)
-    const nonce = deterministicNonce(q, arbitrator, timeout, openingTs)
+    const contentHash = keccak256(toBytes(q.content))
+    const nonce = deterministicNonceStable(q.templateId, contentHash)
 
     // Compute the expected questionId to make the operation idempotent
     const questionId = keccak256(encodeAbiParameters([
@@ -255,7 +303,7 @@ async function main() {
       { type: 'address' },
     ], [
       q.templateId,
-      keccak256(toBytes(q.content)),
+      contentHash,
       arbitrator,
       timeout,
       openingTs,
@@ -276,8 +324,24 @@ async function main() {
       if (timeoutExisting > 0) exists = true
     } catch {}
 
+    // Fallback: avoid duplicates by content if a different nonce/gen was used before
+    if (!exists) {
+      const byContent = await findExistingByContent(publicClient, reality, q.content)
+      if (byContent) {
+        console.log(`  [${i+1}/${Q.length}] SKIP (content exists) ${q.templateId}: ${q.content.split('\n')[0]}`)
+        console.log(`    existing qid: ${byContent}`)
+        continue
+      }
+    }
+
     if (exists) {
       console.log(`  [${i+1}/${Q.length}] SKIP (exists) ${q.templateId}: ${q.content.split('\n')[0]}`)
+      console.log(`    qid: ${questionId}`)
+      continue
+    }
+
+    if (DRY_RUN) {
+      console.log(`  [${i+1}/${Q.length}] DRY-RUN would seed ${q.templateId}: ${q.content.split('\n')[0]}`)
       console.log(`    qid: ${questionId}`)
       continue
     }

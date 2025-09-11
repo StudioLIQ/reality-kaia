@@ -97,73 +97,97 @@ export function useOnchainQuestions(pageSize = 20) {
         finalized: !!q[16],
         pendingArbitration: !!q[17]
       }));
-      // Lightweight recent-log merge: include very recent questions even if not registered in V3
-      let finalRows: Full[] = mapped;
-      try {
-        const head = await client.getBlockNumber();
-        const LIGHT_LOOKBACK = BigInt(Number(process.env.NEXT_PUBLIC_LOG_MERGE_LOOKBACK || '5000'));
-        const MAX_EXTRAS = Number(process.env.NEXT_PUBLIC_LOG_MERGE_LIMIT || '10');
-        const fromBlock = head > LIGHT_LOOKBACK ? head - LIGHT_LOOKBACK : 0n;
-        const logs = await (client as any).getLogs({
-          address: addr.reality!,
-          fromBlock,
-          toBlock: head,
-          abi: realityAbi as any,
-          eventName: "LogNewQuestion",
-        });
+      // Dedupe strictly by question ID to keep pagination stable and predictable
+      const dedupeByContent = (rows: Full[]) => {
+        const byId = new Map<string, Full>();
+        for (const r of rows) {
+          if (!byId.has(r.id)) byId.set(r.id, r);
+        }
+        return Array.from(byId.values());
+      };
 
-        const existing = new Set(finalRows.map((r) => r.id));
-        const extraIds: `0x${string}`[] = [];
-        for (const log of logs as any[]) {
-          const ev = (log as any).args as any;
-          const topicQid = (log.topics && log.topics[1]) ? (log.topics[1] as `0x${string}`) : undefined;
-          const id = (ev?.questionId as `0x${string}`) ?? (Array.isArray(ev) ? (ev[0] as `0x${string}`) : undefined) ?? topicQid;
-          if (!id) continue;
-          if (!existing.has(id)) {
-            existing.add(id);
-            extraIds.push(id);
-            if (extraIds.length >= MAX_EXTRAS) break; // cap to keep it lightweight
+      // Lightweight recent-log merge: include very recent questions (first page only)
+      let finalRows: Full[] = dedupeByContent(mapped);
+      if (p === 0) {
+        try {
+          const head = await client.getBlockNumber();
+          const LIGHT_LOOKBACK = BigInt(Number(process.env.NEXT_PUBLIC_LOG_MERGE_LOOKBACK || '5000'));
+          const MAX_EXTRAS = Number(process.env.NEXT_PUBLIC_LOG_MERGE_LIMIT || '10');
+          const fromBlock = head > LIGHT_LOOKBACK ? head - LIGHT_LOOKBACK : 0n;
+          const logs = await (client as any).getLogs({
+            address: addr.reality!,
+            fromBlock,
+            toBlock: head,
+            abi: realityAbi as any,
+            eventName: "LogNewQuestion",
+          });
+
+          const existing = new Set(finalRows.map((r) => r.id));
+          const extraIds: `0x${string}`[] = [];
+          for (const log of logs as any[]) {
+            const ev = (log as any).args as any;
+            const topicQid = (log.topics && log.topics[1]) ? (log.topics[1] as `0x${string}`) : undefined;
+            const id = (ev?.questionId as `0x${string}`) ?? (Array.isArray(ev) ? (ev[0] as `0x${string}`) : undefined) ?? topicQid;
+            if (!id) continue;
+            if (!existing.has(id)) {
+              existing.add(id);
+              extraIds.push(id);
+              if (extraIds.length >= MAX_EXTRAS) break; // cap to keep it lightweight
+            }
           }
-        }
 
-        if (extraIds.length > 0) {
-          try {
-            const extraBatch = (await client.readContract({
-              address: addr.reality!,
-              abi: realityV3Abi,
-              functionName: "getQuestionFullBatch",
-              args: [extraIds],
-            })) as any[];
-            const extras: Full[] = extraBatch.map((q, i) => ({
-              id: extraIds[i],
-              asker: q[0],
-              arbitrator: q[1],
-              bondToken: q[2],
-              templateId: Number(q[3]),
-              timeoutSec: Number(q[4]),
-              openingTs: Number(q[5]),
-              contentHash: q[6],
-              createdAt: Number(q[7]),
-              content: q[8],
-              outcomesPacked: q[9],
-              language: q[10],
-              category: q[11],
-              metadataURI: q[12],
-              lastAnswerTs: Number(q[13]),
-              bestAnswer: q[14],
-              bestBond: BigInt(q[15] || 0),
-              finalized: !!q[16],
-              pendingArbitration: !!q[17],
-            }));
-            // Merge and sort by createdAt desc
-            const map = new Map<string, Full>();
-            for (const r of [...finalRows, ...extras]) map.set(r.id, r);
-            finalRows = Array.from(map.values()).sort((a,b)=> Number(b.createdAt||0) - Number(a.createdAt||0));
-          } catch {}
-        }
-      } catch {}
+          if (extraIds.length > 0) {
+            try {
+              const extraBatch = (await client.readContract({
+                address: addr.reality!,
+                abi: realityV3Abi,
+                functionName: "getQuestionFullBatch",
+                args: [extraIds],
+              })) as any[];
+              const extras: Full[] = extraBatch.map((q, i) => ({
+                id: extraIds[i],
+                asker: q[0],
+                arbitrator: q[1],
+                bondToken: q[2],
+                templateId: Number(q[3]),
+                timeoutSec: Number(q[4]),
+                openingTs: Number(q[5]),
+                contentHash: q[6],
+                createdAt: Number(q[7]),
+                content: q[8],
+                outcomesPacked: q[9],
+                language: q[10],
+                category: q[11],
+                metadataURI: q[12],
+                lastAnswerTs: Number(q[13]),
+                bestAnswer: q[14],
+                bestBond: BigInt(q[15] || 0),
+                finalized: !!q[16],
+                pendingArbitration: !!q[17],
+              }));
+              // Merge, dedupe by content (latest wins), sort by createdAt desc
+              finalRows = dedupeByContent([...finalRows, ...extras])
+                .sort((a,b)=> Number(b.createdAt||0) - Number(a.createdAt||0));
+            } catch {}
+          }
+        } catch {}
+      }
 
-      setRows(finalRows);
+      // Enforce page size for consistent pagination
+      if (finalRows.length > pageSize) {
+        finalRows = finalRows.slice(0, pageSize);
+      }
+
+      // Final guard: ensure a single row per unique question ID
+      const uniqById = (rows: Full[]) => {
+        const map = new Map<string, Full>();
+        for (const r of rows) {
+          if (!map.has(r.id)) map.set(r.id, r);
+        }
+        return Array.from(map.values());
+      };
+
+      setRows(uniqById(finalRows));
       try {
         localStorage.setItem(cacheKey(p), JSON.stringify({ t: Date.now(), total: tot, rows: finalRows }));
       } catch {}
@@ -175,7 +199,7 @@ export function useOnchainQuestions(pageSize = 20) {
         setErr(v2Error?.message || String(v2Error));
         // Try to load from cache
         try {
-          const raw = localStorage.getItem(cacheKey(page));
+          const raw = localStorage.getItem(cacheKey(p));
           if (raw) {
             const parsed = JSON.parse(raw);
             setTotal(parsed.total);

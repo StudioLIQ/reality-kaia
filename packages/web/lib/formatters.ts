@@ -101,7 +101,8 @@ export function formatDate(timestamp: number | string, options?: {
   }
   
   if (options?.short) {
-    return date.toLocaleDateString('en-US', {
+    // Use toLocaleString so time fields are respected (toLocaleDateString ignores time options)
+    return date.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -109,7 +110,8 @@ export function formatDate(timestamp: number | string, options?: {
     })
   }
   
-  return date.toLocaleDateString('en-US', {
+  // Full date with time and zone
+  return date.toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

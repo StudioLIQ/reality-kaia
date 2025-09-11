@@ -9,7 +9,7 @@ import StatCard from "@/components/StatCard";
 import { DataTable, Th, Td, TRow } from "@/components/DataTable";
 import { deriveStatus, computeDeadline } from "@/lib/status";
 import FlashBanner from "@/components/FlashBanner";
-import { formatAddress, formatDate, formatTokenAmount, getStatusStyle, truncateText, formatNumber } from "@/lib/formatters";
+import { formatAddress, formatDate, formatTokenAmount, getStatusStyle, truncateText, formatNumber, formatDuration } from "@/lib/formatters";
 
 export default function DashboardPage() {
   const { chainId, addr, ready: addrReady, loading: addrLoading, error: addrError } = useAddresses();
@@ -35,12 +35,19 @@ export default function DashboardPage() {
     } as QuestionRow;
   }), [items, addr.usdt, addr.wkaia]);
 
+  // Ensure only one row per unique question ID at the UI layer
+  const uniqueRows: QuestionRow[] = useMemo(() => {
+    const map = new Map<string, QuestionRow>();
+    for (const r of rows) if (!map.has(r.id)) map.set(r.id, r);
+    return Array.from(map.values());
+  }, [rows]);
+
   const [filtered, setFiltered] = useState<QuestionRow[]>([]);
   
   // Initialize/sync filtered with current rows when source changes
   useEffect(() => {
-    setFiltered(rows);
-  }, [rows]);
+    setFiltered(uniqueRows);
+  }, [uniqueRows]);
   
   // Memoize the onChange handler to prevent infinite loops
   const handleFilterChange = useCallback((filteredRows: QuestionRow[]) => {
@@ -101,7 +108,7 @@ export default function DashboardPage() {
       )}
 
       {/* Filters */}
-      <QuestionFilters items={rows} onChange={handleFilterChange} />
+      <QuestionFilters items={uniqueRows} onChange={handleFilterChange} />
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -160,7 +167,7 @@ export default function DashboardPage() {
               <Th>Question</Th>
               <Th>Status</Th>
               <Th align="right">Current Bond</Th>
-              <Th align="center">Timeline</Th>
+              <Th align="center">Deadline</Th>
               <Th align="center">Action</Th>
             </tr>
           </thead>
@@ -238,20 +245,29 @@ export default function DashboardPage() {
                     </div>
                   </Td>
                   <Td align="center">
-                    <div className="text-xs space-y-1">
-                      {q.openingTs && (
-                        <div className="flex items-center gap-1 text-white/60">
-                          <span className="text-white/40">Opens:</span>
-                          <span>{formatDate(q.openingTs, { short: true })}</span>
-                        </div>
-                      )}
-                      {deadline && (
+                    <div className="text-xs">
+                      {deadline ? (
                         <div className="flex items-center gap-1">
                           <span className="text-white/40">Deadline:</span>
                           <span className={`${deadline < nowSec ? 'text-red-400' : 'text-white/60'}`}>
                             {formatDate(deadline, { short: true })}
                           </span>
+                          {(() => {
+                            const remaining = deadline - nowSec;
+                            if (remaining === 0) return null;
+                            if (remaining > 0) {
+                              return (
+                                <span className="ml-1 text-white/40">({formatDuration(remaining)} left)</span>
+                              );
+                            } else {
+                              return (
+                                <span className="ml-1 text-red-400/80">(overdue by {formatDuration(Math.abs(remaining))})</span>
+                              );
+                            }
+                          })()}
                         </div>
+                      ) : (
+                        <span className="text-white/40">—</span>
                       )}
                     </div>
                   </Td>
@@ -274,7 +290,12 @@ export default function DashboardPage() {
       )}
 
       {/* Pagination */}
-      {total > pageSize && (
+      {(() => {
+        const visibleCount = uniqueRows.length;
+        const effectiveTotal = Math.min(total || 0, page * pageSize + visibleCount);
+        const pageCount = Math.max(1, Math.ceil((effectiveTotal || 0) / pageSize));
+        if (pageCount <= 1) return null;
+        return (
         <div className="flex items-center justify-center gap-2 mt-6">
           <button
             onClick={() => setPage(Math.max(0, page - 1))}
@@ -284,17 +305,18 @@ export default function DashboardPage() {
             Previous
           </button>
           <span className="text-white/60 text-sm px-4">
-            Page {page + 1} of {Math.ceil(total / pageSize)}
+            Page {Math.min(page + 1, pageCount)} of {pageCount}
           </span>
           <button
-            onClick={() => setPage(Math.min(Math.ceil(total / pageSize) - 1, page + 1))}
-            disabled={page >= Math.ceil(total / pageSize) - 1}
+            onClick={() => setPage(Math.min(pageCount - 1, page + 1))}
+            disabled={page >= pageCount - 1}
             className="px-4 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-white/80 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Next
           </button>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

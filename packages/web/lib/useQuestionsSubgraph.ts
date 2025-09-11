@@ -78,7 +78,22 @@ export function useQuestionsSubgraph() {
           bestAnswer, bestBond, bestAnswerer, lastAnswerTs, createdAt, question,
         } as QuestionListItem;
       });
-      setItems(mapped);
+      // Dedupe by (asker, contentHash or normalized question text)
+      const zero = '0x0000000000000000000000000000000000000000000000000000000000000000';
+      const byKey = new Map<string, QuestionListItem>();
+      const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+      for (const r of mapped) {
+        const askerKey = (r.asker || '').toLowerCase();
+        const contentKey = (r.contentHash && r.contentHash !== (zero as any))
+          ? r.contentHash
+          : (r.question ? `text:${norm(r.question)}` : r.id);
+        const key = `${askerKey}:${contentKey}`;
+        const prev = byKey.get(key);
+        if (!prev || Number(r.createdAt || 0) > Number(prev.createdAt || 0)) {
+          byKey.set(key, r);
+        }
+      }
+      setItems(Array.from(byKey.values()));
     } catch (e: any) {
       setErr(e?.message || 'Failed to query subgraph');
     } finally {
