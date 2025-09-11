@@ -19,6 +19,8 @@ import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput, fromNow } from '@/l
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
 import { TOKENS_FOR, type BondToken } from '@/lib/tokens'
 import { quoteFee } from '@/lib/fees'
+import { formatTokenAmount, formatDuration } from '@/lib/formatters'
+import { InfoTooltip } from '@/components/Tooltip'
 // Zapper is used for answering flows only; not used for create
 import FeeNotice from '@/components/FeeNotice'
 import TemplatePicker from '@/components/TemplatePicker'
@@ -628,42 +630,50 @@ export default function CreateQuestion() {
           </section>
 
           {/* Timeout Section */}
-          <section>
-            <label className="block text-sm font-medium text-white/80 mb-2">
-              Timeout
-            </label>
-            <div className="flex gap-2 flex-wrap">
-              {TIMEOUT_PRESETS.map(p => (
-                <button
-                  key={p.label}
-                  type="button"
-                  className={`px-3 py-1.5 rounded-full border transition-colors text-sm ${timeoutSec === p.seconds ? 'border-emerald-400 bg-emerald-400/10 text-emerald-300' : 'border-white/10 text-white/70 hover:border-white/20'}`}
-                  onClick={() => { setTimeoutSec(p.seconds); setTimeoutInput(p.seconds/3600); setTimeoutUnit('h'); }}
-                >
-                  {p.label}
-                </button>
-              ))}
-              <span className={`px-3 py-1.5 text-xs rounded-full ${TIMEOUT_PRESETS.some(p => p.seconds === timeoutSec) ? 'opacity-40' : 'bg-white/10'} text-white/50`}>Custom</span>
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <label className="block text-sm font-medium text-white">
+                Answer Timeout
+              </label>
+              <InfoTooltip content="How long an answer must remain unchallenged before it can be finalized. Longer timeouts provide more security but delay resolution." />
             </div>
-            <div className="mt-3 flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                value={timeoutInput}
-                onChange={e => setTimeoutInput(Number(e.target.value || 1))}
-                className="w-28 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
-              />
-              <select
-                value={timeoutUnit}
-                onChange={e => setTimeoutUnit(e.target.value as any)}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
-              >
-                <option value="s">Seconds</option>
-                <option value="m">Minutes</option>
-                <option value="h">Hours</option>
-                <option value="d">Days</option>
-              </select>
-              <span className="text-xs text-white/50">= {timeoutSec.toLocaleString()} sec</span>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {TIMEOUT_PRESETS.map(p => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    className={`px-4 py-2 rounded-lg border transition-all text-sm font-medium ${timeoutSec === p.seconds ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300 shadow-lg shadow-emerald-400/10' : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-white/20'}`}
+                    onClick={() => { setTimeoutSec(p.seconds); setTimeoutInput(p.seconds/3600); setTimeoutUnit('h'); }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Custom timeout */}
+              <div className="p-3 rounded-lg border border-white/10 bg-white/5 space-y-2">
+                <p className="text-xs text-white/60 font-medium">Custom timeout</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={timeoutInput}
+                    onChange={e => setTimeoutInput(Number(e.target.value || 1))}
+                    className="w-24 input-field py-1.5 text-sm"
+                  />
+                  <select
+                    value={timeoutUnit}
+                    onChange={e => setTimeoutUnit(e.target.value as any)}
+                    className="input-field py-1.5 text-sm"
+                  >
+                    <option value="m">Minutes</option>
+                    <option value="h">Hours</option>
+                    <option value="d">Days</option>
+                  </select>
+                  <span className="text-sm text-white/40">= {formatDuration(timeoutSec)}</span>
+                </div>
+              </div>
             </div>
           </section>
 

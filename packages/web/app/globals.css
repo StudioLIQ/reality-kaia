@@ -53,14 +53,90 @@
 
 @layer components {
   .surface-card {
-    @apply rounded-2xl border border-white/10 bg-white/5;
+    @apply rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm;
   }
   
   .btn-primary {
-    @apply border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300;
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
   }
   
   .btn-secondary {
-    @apply border-white/15 hover:bg-white/5 text-white;
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg border border-white/15 hover:bg-white/5 text-white text-sm font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
+  }
+  
+  .badge {
+    @apply inline-flex items-center px-2 py-1 text-xs rounded-full border;
+  }
+  
+  .input-field {
+    @apply block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder-white/40 transition-all duration-200 focus:border-emerald-400/50 focus:bg-white/10 focus:outline-none;
+  }
+  
+  .label {
+    @apply block text-sm font-medium text-white/80 mb-1;
+  }
+  
+  .helper-text {
+    @apply text-xs text-white/50 mt-1;
+  }
+  
+  /* Animations */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes pulse-soft {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.8;
+    }
+  }
+  
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out forwards;
+  }
+  
+  .animate-slide-up {
+    animation: slide-up 0.3s ease-out forwards;
+  }
+  
+  .animate-pulse-soft {
+    animation: pulse-soft 2s ease-in-out infinite;
+  }
+  
+  /* Loading skeleton */
+  .skeleton {
+    @apply relative overflow-hidden bg-white/5 rounded-lg;
+  }
+  
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[shimmer_2s_infinite];
+  }
+  
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
   }
 }

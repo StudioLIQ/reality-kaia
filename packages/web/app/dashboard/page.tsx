@@ -9,14 +9,11 @@ import StatCard from "@/components/StatCard";
 import { DataTable, Th, Td, TRow } from "@/components/DataTable";
 import { deriveStatus, computeDeadline } from "@/lib/status";
 import FlashBanner from "@/components/FlashBanner";
+import { formatAddress, formatDate, formatTokenAmount, getStatusStyle, truncateText, formatNumber } from "@/lib/formatters";
 
 export default function DashboardPage() {
   const { chainId, addr, ready: addrReady, loading: addrLoading, error: addrError } = useAddresses();
   const { total, page, setPage, pageSize, rows: items, loading, err: error } = useOnchainQuestions(20);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copiedAsker, setCopiedAsker] = useState<string | null>(null);
-  const [copiedOpen, setCopiedOpen] = useState<string | null>(null);
-  const [copiedDeadline, setCopiedDeadline] = useState<string | null>(null);
 
   // map to QuestionRow shape filters expect
   const rows: QuestionRow[] = useMemo(() => items.map((q) => {
@@ -107,22 +104,52 @@ export default function DashboardPage() {
       <QuestionFilters items={rows} onChange={handleFilterChange} />
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <StatCard title="Total Questions" value={stats.totalQuestions.toString()} trend="up" />
-        <StatCard title="Open Questions" value={stats.openQuestions.toString()} meta={<span>Active now</span>} />
-        <StatCard title="Total Bonds" value={`${stats.totalBondValue.toFixed(2)}`} meta={<span>All tokens</span>} />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard 
+          title="Total Questions" 
+          value={stats.totalQuestions} 
+          trend="up" 
+          tooltip="Total number of questions in the system"
+        />
+        <StatCard 
+          title="Active Questions" 
+          value={stats.openQuestions} 
+          meta={<span className="flex items-center gap-1">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+            Live now
+          </span>} 
+          tooltip="Questions currently accepting answers"
+        />
+        <StatCard 
+          title="Total Value Locked" 
+          value={formatNumber(stats.totalBondValue, { compact: true })} 
+          meta={<span>Across all tokens</span>}
+          tooltip="Combined value of all bonds"
+        />
       </div>
 
       {/* Table */}
       {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8">
-          <p className="text-white/60 text-center">No questions match your filters.</p>
-          <div className="mt-4 text-center">
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-12 text-center">
+          <svg className="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-white/60 text-lg mb-6">No questions match your current filters</p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="btn-secondary"
+            >
+              Reset Filters
+            </button>
             <Link
               href="/create"
-              className="inline-flex items-center px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors"
+              className="btn-primary"
             >
-              Create Question
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create New Question
             </Link>
           </div>
         </div>
@@ -132,9 +159,8 @@ export default function DashboardPage() {
             <tr>
               <Th>Question</Th>
               <Th>Status</Th>
-              <Th align="right">Bond</Th>
-              <Th align="center">Opens</Th>
-              <Th align="center">Deadline</Th>
+              <Th align="right">Current Bond</Th>
+              <Th align="center">Timeline</Th>
               <Th align="center">Action</Th>
             </tr>
           </thead>
@@ -153,107 +179,91 @@ export default function DashboardPage() {
               return (
                 <TRow key={q.id}>
                   <Td>
-                    <div className="max-w-xs">
-                      <p className="text-white font-medium truncate">{q.text || q.question || q.id}</p>
-                      {q.finalized && (
-                        <div className="mt-1">
-                          <span className="inline-flex px-2 py-0.5 text-[11px] rounded-full border border-white/10 bg-white/5 text-white/60">
-                            ✔ Finalized
-                          </span>
+                    <div className="max-w-md">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1">
+                          <p className="text-white font-medium leading-relaxed">
+                            {truncateText(q.text || q.question || 'Untitled Question', 120)}
+                          </p>
+                          <div className="flex items-center gap-3 mt-2">
+                            {q.asker && (
+                              <span className="text-xs text-white/40 flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                {formatAddress(q.asker, { short: true })}
+                              </span>
+                            )}
+                            {q.createdAt && (
+                              <span className="text-xs text-white/40 flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                {formatDate(q.createdAt, { relative: true })}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      <div className="flex items-center gap-2 text-xs text-white/40 mt-1">
-                        <span>ID: {q.id.slice(0, 10)}...</span>
-                        <button
-                          type="button"
-                          className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
-                          onClick={async () => { try { await navigator.clipboard.writeText(q.id); } catch {}; setCopiedId(q.id); setTimeout(()=> setCopiedId(null), 1200); }}
-                          title="Copy full ID"
-                        >
-                          📋 {copiedId === q.id ? 'Copied' : 'Copy'}
-                        </button>
-                      </div>
-                      <div className="text-xs text-white/40 mt-1 flex items-center gap-2 flex-wrap">
-                        {q.asker && (
-                          <>
-                            <span>Asker: {q.asker.slice(0, 6)}…{q.asker.slice(-4)}</span>
-                            <button
-                              type="button"
-                              className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
-                              onClick={async () => { try { await navigator.clipboard.writeText(q.asker!); } catch {}; setCopiedAsker(q.id); setTimeout(()=> setCopiedAsker(null), 1200); }}
-                              title="Copy asker address"
-                            >
-                              📋 {copiedAsker === q.id ? 'Copied' : 'Copy'}
-                            </button>
-                          </>
-                        )}
-                        {q.createdAt && (
-                          <span title={`unix: ${q.createdAt}`}>• Created: {new Date(Number(q.createdAt) * 1000).toLocaleString()}</span>
-                        )}
                       </div>
                     </div>
                   </Td>
                   <Td>
-                    <span className={`inline-flex px-2 py-1 text-xs rounded-full border ${statusColors[status]}`}>
-                      {status.charAt(0) + status.slice(1).toLowerCase()}
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border ${getStatusStyle(status).color}`}>
+                      {getStatusStyle(status).icon && <span className="text-sm">{getStatusStyle(status).icon}</span>}
+                      {getStatusStyle(status).label}
                     </span>
                   </Td>
-                  <Td align="right" className="text-white/70 text-sm">
-                    <span title={(() => {
-                    const raw = q.currentBondRaw as any as bigint | undefined;
-                    const token = q.bondTokenAddress as string | undefined;
-                    const tokenInfo = token ? ` | token: ${token}` : '';
-                    return raw && raw !== 0n ? `${raw.toString()} (raw)${tokenInfo}` : token ? `token: ${token}` : '';
-                  })()}>
-                    {(() => {
-                      const raw = q.currentBondRaw as any as bigint | undefined;
-                      if (!raw || raw === 0n) return '-';
-                      const d = q.bondTokenSymbol === 'USDT' ? 6 : 18;
-                      const sym = q.bondTokenSymbol || '';
-                      return `${formatUnits(raw, d)} ${sym}`;
-                    })()}
-                    </span>
+                  <Td align="right">
+                    <div className="text-sm">
+                      {(() => {
+                        const raw = q.currentBondRaw as any as bigint | undefined;
+                        if (!raw || raw === 0n) {
+                          return <span className="text-white/40">No bond yet</span>;
+                        }
+                        const d = q.bondTokenSymbol === 'USDT' ? 6 : 18;
+                        const sym = q.bondTokenSymbol || 'TOKEN';
+                        return (
+                          <div className="flex flex-col items-end">
+                            <span className="text-white font-medium">
+                              {formatTokenAmount(raw, d, sym, { compact: true })}
+                            </span>
+                            {q.bondTokenSymbol && (
+                              <span className="text-[10px] text-white/40 uppercase">
+                                Min next: {formatTokenAmount(raw * 2n, d, '', { compact: true })}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </Td>
-                  <Td align="center" className="text-white/60 text-sm">
-                    {q.openingTs ? (
-                      <div className="inline-flex items-center gap-2">
-                        <span title={`unix: ${q.openingTs}`}>{new Date(q.openingTs * 1000).toLocaleString()}</span>
-                        <button
-                          type="button"
-                          className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
-                          onClick={async () => { try { await navigator.clipboard.writeText(String(q.openingTs)); } catch {}; setCopiedOpen(q.id); setTimeout(()=> setCopiedOpen(null), 1200); }}
-                          title="Copy unix timestamp"
-                        >
-                          📋 {copiedOpen === q.id ? 'Copied' : 'Copy'}
-                        </button>
-                      </div>
-                    ) : (
-                      '-'
-                    )}
-                  </Td>
-                  <Td align="center" className="text-white/60 text-sm">
-                    {deadline ? (
-                      <div className="inline-flex items-center gap-2">
-                        <span title={`unix: ${deadline}`}>{new Date(deadline * 1000).toLocaleString()}</span>
-                        <button
-                          type="button"
-                          className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
-                          onClick={async () => { try { await navigator.clipboard.writeText(String(deadline)); } catch {}; setCopiedDeadline(q.id); setTimeout(()=> setCopiedDeadline(null), 1200); }}
-                          title="Copy unix timestamp"
-                        >
-                          📋 {copiedDeadline === q.id ? 'Copied' : 'Copy'}
-                        </button>
-                      </div>
-                    ) : (
-                      '-'
-                    )}
+                  <Td align="center">
+                    <div className="text-xs space-y-1">
+                      {q.openingTs && (
+                        <div className="flex items-center gap-1 text-white/60">
+                          <span className="text-white/40">Opens:</span>
+                          <span>{formatDate(q.openingTs, { short: true })}</span>
+                        </div>
+                      )}
+                      {deadline && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-white/40">Deadline:</span>
+                          <span className={`${deadline < nowSec ? 'text-red-400' : 'text-white/60'}`}>
+                            {formatDate(deadline, { short: true })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </Td>
                   <Td align="center">
                     <Link
                       href={`/q/${q.id}`}
-                      className="inline-flex items-center px-3 py-1 rounded-lg border border-white/10 hover:bg-white/5 text-white/80 text-xs font-medium transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-white/80 text-xs font-medium transition-all duration-200 hover:scale-105 group"
                     >
-                      View
+                      <span>View Details</span>
+                      <svg className="w-3 h-3 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </Link>
                   </Td>
                 </TRow>
