@@ -45,6 +45,7 @@ export default function QuestionFilters({
     SCHEDULED: true, OPEN: true, ANSWERED: true, FINALIZED: true, DISPUTED: true,
   });
   const [tokenPick, setTokenPick] = useState<TokenPick>("ALL");
+  const [filterAddress, setFilterAddress] = useState<string>("");
 
   // --- sort state
   const [sortKey, setSortKey] = useState<SortKey>("DEADLINE");
@@ -54,6 +55,12 @@ export default function QuestionFilters({
 
   const filtered = useMemo(() => {
     let rows = items.slice();
+
+    // Asker address filter (optional)
+    if (filterAddress.trim()) {
+      const target = filterAddress.trim().toLowerCase();
+      rows = rows.filter(r => (r.asker || r.user || "").toLowerCase() === target);
+    }
 
     // Mine only
     if (mineOnly && isConnected && address) {
@@ -160,6 +167,16 @@ export default function QuestionFilters({
 
         {/* Right side controls */}
         <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {/* Asker filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-white/50">Asker</span>
+            <input
+              value={filterAddress}
+              onChange={(e)=> setFilterAddress(e.target.value)}
+              placeholder="0x..."
+              className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-400/50 w-48"
+            />
+          </div>
           {/* Token picker */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-white/50">Token</span>

@@ -615,8 +615,13 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="text-center">Loading question details...</div>
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="flex items-center justify-center min-h-[200px]">
+          <div className="text-center">
+            <div className="inline-flex h-8 w-8 animate-spin rounded-full border-2 border-emerald-400 border-r-transparent" />
+            <p className="mt-4 text-white/60">Loading question details…</p>
+          </div>
+        </div>
       </div>
     )
   }
@@ -636,29 +641,31 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
   const minBond = question.bestBond > 0 ? BigInt(question.bestBond) * BigInt(2) : BigInt(1)
 
   return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div className="px-4 py-6 sm:px-0">
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="">
         {gated && (
           <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
             Please connect KaiaWallet to Kairos testnet (chain {KAIA_TESTNET_ID}).
           </div>
         )}
-        <div className={`bg-white overflow-hidden shadow rounded-lg ${gated ? 'opacity-50' : ''}`}>
-          <div className="px-4 py-5 sm:p-6">
-            <h2 className="text-2xl font-bold mb-6">Question Details</h2>
+        <div className={`rounded-2xl border border-white/10 bg-neutral-950 p-6 ${gated ? 'opacity-50' : ''}`}>
+          <div className="">
+            <h2 className="text-2xl font-bold text-white">Question Details</h2>
+            <p className="mt-1 text-sm text-white/60">Review and answer the question below</p>
+            <div className="h-px w-full bg-white/10 my-6" />
             
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-500">Question ID</p>
-                <p className="font-mono text-xs">{question.id}</p>
+                <p className="text-sm text-white/60">Question ID</p>
+                <p className="font-mono text-xs text-white/90 break-all">{question.id}</p>
               </div>
               
               {/* Question Content */}
               {questionMetadata?.content && (
                 <div>
-                  <p className="text-sm text-gray-500">Question</p>
-                  <div className="mt-1 p-3 bg-gray-50 rounded-md">
-                    <p className="text-sm whitespace-pre-wrap">{questionMetadata.content}</p>
+                  <p className="text-sm text-white/60">Question</p>
+                  <div className="mt-1 p-3 bg-white/5 rounded-md border border-white/10">
+                    <p className="text-sm whitespace-pre-wrap text-white/90">{questionMetadata.content}</p>
                   </div>
                 </div>
               )}
@@ -666,12 +673,12 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
               {/* Answer Choices (for Multiple Choice) */}
               {questionMetadata?.outcomesPacked && questionMetadata.outcomesPacked.length > 0 && (
                 <div>
-                  <p className="text-sm text-gray-500">Answer Choices</p>
+                  <p className="text-sm text-white/60">Answer Choices</p>
                   <div className="mt-1 space-y-1">
                     {questionMetadata.outcomesPacked.split('\u001F').map((choice: string, index: number) => (
-                      <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                        <span className="text-xs font-medium text-gray-500 w-6">{String.fromCharCode(65 + index)})</span>
-                        <span className="text-sm">{choice}</span>
+                      <div key={index} className="flex items-center gap-2 p-2 bg-white/5 rounded border border-white/10">
+                        <span className="text-xs font-medium text-white/60 w-6">{String.fromCharCode(65 + index)})</span>
+                        <span className="text-sm text-white/90">{choice}</span>
                       </div>
                     ))}
                   </div>
@@ -679,60 +686,88 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
               )}
               
               <div>
-                <p className="text-sm text-gray-500">Status</p>
-                <p className="font-medium">{question.finalized ? 'Finalized' : 'Open'}</p>
+                <p className="text-sm text-white/60">Status</p>
+                <p className="font-medium text-white">{question.finalized ? 'Finalized' : 'Open'}</p>
               </div>
               
               <div>
-                <p className="text-sm text-gray-500">Template</p>
+                <p className="text-sm text-white/60">Template</p>
                 <div className="flex items-center gap-2">
                   {questionMetadata?.templateId ? (
                     <>
-                      <span className="rounded-full border border-blue-400/30 bg-blue-400/10 px-2 py-0.5 text-xs text-blue-600">
+                      <span className="rounded-full border border-blue-400/30 bg-blue-400/10 px-2 py-0.5 text-xs text-blue-300">
                         Template {questionMetadata.templateId}
                       </span>
                       {questionMetadata.templateId === 3 && (
-                        <span className="text-xs text-gray-500">(Multiple Choice)</span>
+                        <span className="text-xs text-white/60">(Multiple Choice)</span>
                       )}
                     </>
                   ) : (
                     <>
-                      <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-600">
+                      <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-300">
                         Template info not available
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-white/60">
                         (Template ID is not stored on-chain)
                       </span>
                     </>
                   )}
                 </div>
+
+                {/* Template info panel */}
+                {questionMetadata?.templateId && (() => {
+                  const spec = TEMPLATES.find(t => t.id === Number(questionMetadata.templateId));
+                  if (!spec) return null;
+                  return (
+                    <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-white/80 font-medium">{spec.label}</span>
+                        {spec.badges?.map((b, i) => (
+                          <span key={i} className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[11px] text-emerald-300">{b}</span>
+                        ))}
+                      </div>
+                      <p className="text-white/60 mb-2">{spec.summary}</p>
+                      {spec.details?.length > 0 && (
+                        <ul className="list-disc ml-5 text-white/70 space-y-1">
+                          {spec.details.map((d, i) => (<li key={i}>{d}</li>))}
+                        </ul>
+                      )}
+                      {spec.sample && (
+                        <div className="mt-3 rounded-md border border-white/10 bg-white/5 p-2">
+                          <p className="text-[11px] uppercase tracking-wide text-white/50 mb-1">Example</p>
+                          <pre className="whitespace-pre-wrap text-white/80 text-xs">{spec.sample}</pre>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               
               {/* Category */}
               {questionMetadata?.category && (
                 <div>
-                  <p className="text-sm text-gray-500">Category</p>
-                  <p className="font-medium">{questionMetadata.category}</p>
+                  <p className="text-sm text-white/60">Category</p>
+                  <p className="font-medium text-white">{questionMetadata.category}</p>
                 </div>
               )}
               
               {/* Language */}
               {questionMetadata?.language && (
                 <div>
-                  <p className="text-sm text-gray-500">Language</p>
-                  <p className="font-medium">{questionMetadata.language}</p>
+                  <p className="text-sm text-white/60">Language</p>
+                  <p className="font-medium text-white">{questionMetadata.language}</p>
                 </div>
               )}
               
               {/* Metadata URI */}
               {questionMetadata?.metadataURI && (
                 <div>
-                  <p className="text-sm text-gray-500">Metadata URI</p>
+                  <p className="text-sm text-white/60">Metadata URI</p>
                   <a 
                     href={questionMetadata.metadataURI} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 text-sm break-all"
+                    className="text-blue-300 hover:text-blue-200 text-sm break-all"
                   >
                     {questionMetadata.metadataURI}
                   </a>
@@ -740,11 +775,11 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
               )}
               
               <div>
-                <p className="text-sm text-gray-500">Bond Token</p>
-                <p className="font-medium">
+                <p className="text-sm text-white/60">Bond Token</p>
+                <p className="font-medium text-white">
                   {bondTokenInfo ? `${bondTokenInfo.label} (${bondTokenInfo.symbol})` : 'Native KAIA'}
                   {bondTokenInfo?.symbol === 'WKAIA' && (
-                    <span className="ml-2 text-xs text-gray-500">
+                    <span className="ml-2 text-xs text-white/60">
                       (Wrapped KAIA)
                     </span>
                   )}
@@ -752,29 +787,29 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
               </div>
               
               <div>
-                <p className="text-sm text-gray-500">Timeout</p>
-                <p>{question.timeout} seconds</p>
+                <p className="text-sm text-white/60">Timeout</p>
+                <p className="text-white/90">{question.timeout} seconds</p>
               </div>
               
               <div>
-                <p className="text-sm text-gray-500">Current Best Answer</p>
-                <p className="font-mono">{question.bestAnswer || 'None'}</p>
+                <p className="text-sm text-white/60">Current Best Answer</p>
+                <p className="font-mono text-white/90 break-all">{question.bestAnswer || 'None'}</p>
               </div>
               
               <div>
-                <p className="text-sm text-gray-500">Current Best Bond</p>
-                <p>{question.bestBond ? formatEther(question.bestBond) : '0'} {bondTokenInfo?.symbol || 'KAIA'}</p>
+                <p className="text-sm text-white/60">Current Best Bond</p>
+                <p className="text-white/90">{question.bestBond ? formatEther(question.bestBond) : '0'} {bondTokenInfo?.symbol || 'KAIA'}</p>
               </div>
               
               <div>
-                <p className="text-sm text-gray-500">Minimum Next Bond</p>
-                <p>{formatEther(minBond)} {bondTokenInfo?.symbol || 'KAIA'}</p>
+                <p className="text-sm text-white/60">Minimum Next Bond</p>
+                <p className="text-white/90">{formatEther(minBond)} {bondTokenInfo?.symbol || 'KAIA'}</p>
               </div>
               
               {question.finalized && (
-                <div className="p-4 bg-green-50 rounded-md">
-                  <p className="text-sm font-medium text-green-800">Final Result</p>
-                  <p className="font-mono text-green-900">{question.bestAnswer}</p>
+                <div className="p-4 rounded-md bg-emerald-400/10 border border-emerald-400/30">
+                  <p className="text-sm font-medium text-emerald-300">Final Result</p>
+                  <p className="font-mono text-emerald-200 break-all">{question.bestAnswer}</p>
                 </div>
               )}
             </div>
@@ -782,34 +817,114 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
             {!question.finalized && (
               <div className="mt-8 space-y-6">
                 <div className="border-t pt-6">
-                  <h3 className="text-lg font-medium mb-4">Submit Answer</h3>
+                  <h3 className="text-lg font-medium mb-4 text-white">Submit Answer</h3>
                   
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-white/80">
                         Answer (bytes32 or number)
                       </label>
                       <input
                         type="text"
                         value={answerForm.answer}
                         onChange={(e) => setAnswerForm({ ...answerForm, answer: e.target.value })}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
-                        placeholder="1 for YES, 0 for NO, or custom bytes32"
+                        className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white sm:text-sm"
+                        placeholder={(() => {
+                          const spec = questionMetadata?.templateId ? TEMPLATES.find(t => t.id === Number(questionMetadata.templateId)) : null;
+                          if (spec?.answerType === 'binary') return 'Enter 1 for YES, 0 for NO';
+                          if (spec?.answerType === 'multi') return 'Enter choice index (A=0, B=1, …)';
+                          if (spec?.answerType === 'integer') return 'Enter integer value (e.g., 42)';
+                          if (spec?.answerType === 'datetime') return 'Enter Unix timestamp in seconds (UTC)';
+                          if (spec?.answerType === 'text') return 'Enter bytes32 (e.g., keccak256 of text)';
+                          return '1 for YES, 0 for NO, or bytes32';
+                        })()}
                       />
+                      {/* Quick-select chips for common templates */}
+                      {(() => {
+                        const tid = questionMetadata?.templateId ? Number(questionMetadata.templateId) : undefined;
+                        if (tid === 1) {
+                          const isYes = answerForm.answer === '1';
+                          const isNo = answerForm.answer === '0';
+                          return (
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setAnswerForm({ ...answerForm, answer: '1' })}
+                                className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${isYes ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-white/10 text-white/70 hover:border-white/20'}`}
+                                aria-pressed={isYes}
+                              >
+                                YES (1)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAnswerForm({ ...answerForm, answer: '0' })}
+                                className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${isNo ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-white/10 text-white/70 hover:border-white/20'}`}
+                                aria-pressed={isNo}
+                              >
+                                NO (0)
+                              </button>
+                            </div>
+                          );
+                        }
+                        if (tid === 3 && questionMetadata?.outcomesPacked) {
+                          const choices = String(questionMetadata.outcomesPacked).split('\u001F');
+                          return (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {choices.map((c, i) => {
+                                const selected = answerForm.answer === String(i);
+                                const label = String.fromCharCode(65 + i);
+                                return (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    title={`${label}) ${c}`}
+                                    onClick={() => setAnswerForm({ ...answerForm, answer: String(i) })}
+                                    className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${selected ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-white/10 text-white/70 hover:border-white/20'}`}
+                                    aria-pressed={selected}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                      <p className="mt-1 text-xs text-white/60">
+                        {(() => {
+                          const spec = questionMetadata?.templateId ? TEMPLATES.find(t => t.id === Number(questionMetadata.templateId)) : null;
+                          if (!spec) return 'Provide a numeric answer or a 32-byte hex value.';
+                          switch (spec.answerType) {
+                            case 'binary':
+                              return 'Guide: answer 1 = YES, 0 = NO.';
+                            case 'multi':
+                              return 'Guide: answer the choice index (A=0, B=1, C=2, …).';
+                            case 'integer':
+                              return 'Guide: answer must be an integer (units defined in question).';
+                            case 'datetime':
+                              return 'Guide: answer is a Unix timestamp in seconds (UTC).';
+                            case 'text':
+                              return 'Guide: answer as bytes32 (e.g., keccak256(normalized text)) per question rules.';
+                            default:
+                              return 'Provide a numeric answer or a 32-byte hex value.';
+                          }
+                        })()}
+                      </p>
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-white/80">
                         Bond Amount (in tokens)
                       </label>
                       <input
                         type="text"
                         value={answerForm.bond}
                         onChange={(e) => setAnswerForm({ ...answerForm, bond: e.target.value })}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
+                        className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white sm:text-sm"
                         placeholder={formatEther(minBond)}
                       />
-                      <p className="mt-1 text-sm text-gray-500">
+                      <p className="mt-1 text-sm text-white/60">
                         Minimum: {formatEther(minBond)} {bondTokenInfo?.symbol || 'tokens'}
                       </p>
                       {feeQuote && bondTokenInfo && feeInfo && answerForm.bond && (
@@ -829,25 +944,28 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
                         id="isCommit"
                         checked={answerForm.isCommit}
                         onChange={(e) => setAnswerForm({ ...answerForm, isCommit: e.target.checked })}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        className="h-4 w-4 rounded border-white/20 bg-white/5 text-emerald-400 focus:ring-emerald-400/50"
                       />
-                      <label htmlFor="isCommit" className="ml-2 block text-sm text-gray-900">
+                      <label htmlFor="isCommit" className="ml-2 block text-sm text-white/80">
                         Use commit-reveal
                       </label>
                     </div>
                     
                     {answerForm.isCommit && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
+                        <label className="block text-sm font-medium text-white/80">
                           Nonce (for commit-reveal)
                         </label>
                         <input
                           type="text"
                           value={answerForm.nonce}
                           onChange={(e) => setAnswerForm({ ...answerForm, nonce: e.target.value })}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
+                          className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white sm:text-sm"
                           placeholder="Secret nonce"
                         />
+                        <p className="mt-1 text-xs text-white/60">
+                          Keep this secret. Save it; you will need the exact same nonce to reveal later.
+                        </p>
                       </div>
                     )}
                     
@@ -869,7 +987,7 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
                         <button
                           onClick={handleSubmitAnswer}
                           disabled={actionLoading || !address || gated}
-                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {actionLoading ? 'Submitting...' : 'Submit Answer'}
                         </button>
@@ -879,38 +997,123 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
                 </div>
                 
                 <div className="border-t pt-6">
-                  <h3 className="text-lg font-medium mb-4">Reveal Commitment</h3>
-                  <p className="text-sm text-gray-500 mb-4">No fee required for revealing answers</p>
+                  <h3 className="text-lg font-medium mb-4 text-white">Reveal Commitment</h3>
+                  <p className="text-sm text-white/60 mb-4">No fee required for revealing answers</p>
                   
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-white/80">
                         Answer
                       </label>
                       <input
                         type="text"
                         value={revealForm.answer}
                         onChange={(e) => setRevealForm({ ...revealForm, answer: e.target.value })}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
+                        className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white sm:text-sm"
+                        placeholder={(() => {
+                          const spec = questionMetadata?.templateId ? TEMPLATES.find(t => t.id === Number(questionMetadata.templateId)) : null;
+                          if (spec?.answerType === 'binary') return 'Enter 1 for YES, 0 for NO';
+                          if (spec?.answerType === 'multi') return 'Enter choice index (A=0, B=1, …)';
+                          if (spec?.answerType === 'integer') return 'Enter integer value (e.g., 42)';
+                          if (spec?.answerType === 'datetime') return 'Enter Unix timestamp in seconds (UTC)';
+                          if (spec?.answerType === 'text') return 'Enter bytes32 (e.g., keccak256 of text)';
+                          return '1 for YES, 0 for NO, or bytes32';
+                        })()}
                       />
+                      <p className="mt-1 text-xs text-white/60">
+                        {(() => {
+                          const spec = questionMetadata?.templateId ? TEMPLATES.find(t => t.id === Number(questionMetadata.templateId)) : null;
+                          if (!spec) return 'Provide the same numeric or 32-byte hex value used at commit time.';
+                          switch (spec.answerType) {
+                            case 'binary':
+                              return 'Guide: reveal 1 = YES, 0 = NO (must match your committed value).';
+                            case 'multi':
+                              return 'Guide: reveal the choice index (A=0, B=1, …) matching your commit.';
+                            case 'integer':
+                              return 'Guide: reveal the exact integer value (units per question).';
+                            case 'datetime':
+                              return 'Guide: reveal the Unix timestamp in seconds (UTC).';
+                            case 'text':
+                              return 'Guide: reveal as bytes32 (e.g., keccak256(normalized text)) as specified.';
+                            default:
+                              return 'Provide the same numeric or 32-byte hex value used at commit time.';
+                          }
+                        })()}
+                      </p>
+                      {/* Quick-select chips for reveal */}
+                      {(() => {
+                        const tid = questionMetadata?.templateId ? Number(questionMetadata.templateId) : undefined;
+                        if (tid === 1) {
+                          const isYes = revealForm.answer === '1';
+                          const isNo = revealForm.answer === '0';
+                          return (
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setRevealForm({ ...revealForm, answer: '1' })}
+                                className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${isYes ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-white/10 text-white/70 hover:border-white/20'}`}
+                                aria-pressed={isYes}
+                              >
+                                YES (1)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRevealForm({ ...revealForm, answer: '0' })}
+                                className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${isNo ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-white/10 text-white/70 hover:border-white/20'}`}
+                                aria-pressed={isNo}
+                              >
+                                NO (0)
+                              </button>
+                            </div>
+                          );
+                        }
+                        if (tid === 3 && questionMetadata?.outcomesPacked) {
+                          const choices = String(questionMetadata.outcomesPacked).split('\u001F');
+                          return (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {choices.map((c, i) => {
+                                const selected = revealForm.answer === String(i);
+                                const label = String.fromCharCode(65 + i);
+                                return (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    title={`${label}) ${c}`}
+                                    onClick={() => setRevealForm({ ...revealForm, answer: String(i) })}
+                                    className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${selected ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-white/10 text-white/70 hover:border-white/20'}`}
+                                    aria-pressed={selected}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-white/80">
                         Nonce
                       </label>
                       <input
                         type="text"
                         value={revealForm.nonce}
                         onChange={(e) => setRevealForm({ ...revealForm, nonce: e.target.value })}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
+                        className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white sm:text-sm"
+                        placeholder="Exact nonce used during commit"
                       />
+                      <p className="mt-1 text-xs text-white/60">
+                        Must match the nonce used at commit time. Otherwise the reveal will fail.
+                      </p>
                     </div>
                     
                     <button
                       onClick={handleReveal}
                       disabled={actionLoading || !address || gated}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-400/30 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {actionLoading ? 'Revealing...' : 'Reveal Answer'}
                     </button>
@@ -922,7 +1125,7 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
                     <button
                       onClick={handleFinalize}
                       disabled={actionLoading || !address || gated}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {actionLoading ? 'Finalizing...' : 'Finalize Question'}
                     </button>
@@ -932,8 +1135,8 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
             )}
             
             {error && (
-              <div className="mt-4 rounded-md bg-red-50 p-4">
-                <p className="text-sm text-red-800">{error}</p>
+              <div className="mt-4 rounded-lg border border-red-400/30 bg-red-400/10 p-4">
+                <p className="text-sm text-red-300">{error}</p>
               </div>
             )}
           </div>

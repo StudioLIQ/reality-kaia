@@ -12,6 +12,7 @@ import {
 } from '@/lib/contracts'
 import { realityAbi } from '@/lib/abi/reality'
 import { realityV2Abi } from '@/lib/abi/realityV2'
+import { realityV3Abi } from '@/lib/abi/realityV3'
 import { useAddresses } from '@/lib/contracts.client'
 import { USDT_MAINNET, type Addr } from '@/lib/viem'
 import { TIMEOUT_PRESETS, unitSeconds, toUnix, toLocalInput, fromNow } from '@/lib/time'
@@ -281,13 +282,15 @@ export default function CreateQuestion() {
       const SEP = "\u001F";
       const outcomesPacked = (templateId === 3 && outcomes.length) ? outcomes.join(SEP) : "";
 
-      // Try V2 first, fallback to V1
+      // Prefer V3 (which registers for pagination); fallback to V2, then V1
       let hash: `0x${string}`;
+      let usedV3 = false;
       try {
+        // Try V3 method
         hash = await walletClient.writeContract({
           address: addr.reality as Addr,
-          abi: realityV2Abi as any,
-          functionName: 'askQuestionERC20Full',
+          abi: realityV3Abi as any,
+          functionName: 'askQuestionERC20V3',
           args: [
             bondToken.address,
             Number(templateId),
@@ -297,30 +300,54 @@ export default function CreateQuestion() {
             Math.floor(timeoutSec),
             Math.floor(currentOpeningTs),
             nonce,
-            "en",                // language
-            formData.category || "",
-            formData.metadataURI || ""
+            'en',
+            formData.category || '',
+            formData.metadataURI || ''
           ],
           account: address,
         });
-      } catch (error) {
-        // Fallback to V1 (content only)
-        console.log('V2 failed, falling back to V1:', error);
-        hash = await walletClient.writeContract({
-          address: addr.reality as Addr,
-          abi: REALITIO_ERC20_ABI,
-          functionName: 'askQuestionERC20',
-          args: [
-            bondToken.address,
-            Number(templateId),
-            formData.question,
-            arbitratorAddress as Addr,
-            Math.floor(timeoutSec),
-            Math.floor(currentOpeningTs),
-            nonce,
-          ],
-          account: address,
-        });
+        usedV3 = true;
+      } catch (v3err) {
+        try {
+          // Fallback to V2: still creates question, but not auto-registered
+          hash = await walletClient.writeContract({
+            address: addr.reality as Addr,
+            abi: realityV2Abi as any,
+            functionName: 'askQuestionERC20Full',
+            args: [
+              bondToken.address,
+              Number(templateId),
+              formData.question,
+              outcomesPacked,
+              arbitratorAddress as Addr,
+              Math.floor(timeoutSec),
+              Math.floor(currentOpeningTs),
+              nonce,
+              'en',
+              formData.category || '',
+              formData.metadataURI || ''
+            ],
+            account: address,
+          });
+        } catch (error) {
+          // Fallback to V1 (content only)
+          console.log('V3/V2 failed, falling back to V1:', error);
+          hash = await walletClient.writeContract({
+            address: addr.reality as Addr,
+            abi: REALITIO_ERC20_ABI,
+            functionName: 'askQuestionERC20',
+            args: [
+              bondToken.address,
+              Number(templateId),
+              formData.question,
+              arbitratorAddress as Addr,
+              Math.floor(timeoutSec),
+              Math.floor(currentOpeningTs),
+              nonce,
+            ],
+            account: address,
+          });
+        }
       }
 
       // Fire-and-forget: wait for receipt and confirm optimistic questionId
@@ -347,7 +374,22 @@ export default function CreateQuestion() {
                 }
               } catch {}
             }
-            if (qid) bus.emit({ chainId, questionId: qid })
+            if (qid) {
+              bus.emit({ chainId, questionId: qid })
+
+              // If V3 wasn't used, attempt to register the question to make it visible in pagination
+              if (!usedV3) {
+                try {
+                  await walletClient!.writeContract({
+                    address: addr.reality as Addr,
+                    abi: realityV3Abi as any,
+                    functionName: 'registerExistingQuestion',
+                    args: [qid],
+                    account: address,
+                  })
+                } catch {}
+              }
+            }
           } catch {}
         })()
       }

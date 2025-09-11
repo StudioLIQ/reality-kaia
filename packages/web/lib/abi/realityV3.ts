@@ -1,6 +1,25 @@
 export const realityV3Abi = [
   {
     type: "function",
+    name: "askQuestionERC20V3",
+    stateMutability: "nonpayable",
+    inputs: [
+      { type:"address", name:"bondToken" },
+      { type:"uint32",  name:"templateId" },
+      { type:"string",  name:"content" },
+      { type:"string",  name:"outcomesPacked" },
+      { type:"address", name:"arbitrator" },
+      { type:"uint32",  name:"timeout" },
+      { type:"uint32",  name:"openingTs" },
+      { type:"bytes32", name:"nonce" },
+      { type:"string",  name:"language" },
+      { type:"string",  name:"category" },
+      { type:"string",  name:"metadataURI" }
+    ],
+    outputs: [{ type: "bytes32" }]
+  },
+  {
+    type: "function",
     name: "totalQuestions",
     stateMutability: "view",
     inputs: [],
@@ -87,5 +106,12 @@ export const realityV3Abi = [
         ]
       }
     ]
+  },
+  {
+    type: "function",
+    name: "registerExistingQuestion",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "bytes32", name: "questionId" }],
+    outputs: []
   }
 ] as const;

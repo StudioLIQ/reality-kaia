@@ -2,8 +2,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useChainId } from "wagmi";
 import { createPublicClient, http } from "viem";
+import { getPublicClient } from "@/lib/viem";
 import { useAddresses } from "@/lib/contracts.client";
 import { realityV3Abi } from "@/lib/abi/realityV3";
+import { realityAbi } from "@/lib/abi/reality";
 import { realityV2Abi } from "@/lib/abi/realityV2";
 
 type Full = {
@@ -37,8 +39,8 @@ export function useOnchainQuestions(pageSize = 20) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  const rpc = process.env.NEXT_PUBLIC_RPC_TESTNET ?? "https://public-en-kairos.node.kaia.io";
-  const client = useMemo(() => createPublicClient({ transport: http(rpc) } as any), [rpc]);
+  // Use chain-aware public client so we query the right network
+  const client = useMemo(() => getPublicClient(chainId), [chainId]);
 
   const cacheKey = (p: number) => `ora:q:${chainId}:${p}:${pageSize}`;
 
@@ -95,9 +97,75 @@ export function useOnchainQuestions(pageSize = 20) {
         finalized: !!q[16],
         pendingArbitration: !!q[17]
       }));
-      setRows(mapped);
+      // Lightweight recent-log merge: include very recent questions even if not registered in V3
+      let finalRows: Full[] = mapped;
       try {
-        localStorage.setItem(cacheKey(p), JSON.stringify({ t: Date.now(), total: tot, rows: mapped }));
+        const head = await client.getBlockNumber();
+        const LIGHT_LOOKBACK = BigInt(Number(process.env.NEXT_PUBLIC_LOG_MERGE_LOOKBACK || '5000'));
+        const MAX_EXTRAS = Number(process.env.NEXT_PUBLIC_LOG_MERGE_LIMIT || '10');
+        const fromBlock = head > LIGHT_LOOKBACK ? head - LIGHT_LOOKBACK : 0n;
+        const logs = await (client as any).getLogs({
+          address: addr.reality!,
+          fromBlock,
+          toBlock: head,
+          abi: realityAbi as any,
+          eventName: "LogNewQuestion",
+        });
+
+        const existing = new Set(finalRows.map((r) => r.id));
+        const extraIds: `0x${string}`[] = [];
+        for (const log of logs as any[]) {
+          const ev = (log as any).args as any;
+          const topicQid = (log.topics && log.topics[1]) ? (log.topics[1] as `0x${string}`) : undefined;
+          const id = (ev?.questionId as `0x${string}`) ?? (Array.isArray(ev) ? (ev[0] as `0x${string}`) : undefined) ?? topicQid;
+          if (!id) continue;
+          if (!existing.has(id)) {
+            existing.add(id);
+            extraIds.push(id);
+            if (extraIds.length >= MAX_EXTRAS) break; // cap to keep it lightweight
+          }
+        }
+
+        if (extraIds.length > 0) {
+          try {
+            const extraBatch = (await client.readContract({
+              address: addr.reality!,
+              abi: realityV3Abi,
+              functionName: "getQuestionFullBatch",
+              args: [extraIds],
+            })) as any[];
+            const extras: Full[] = extraBatch.map((q, i) => ({
+              id: extraIds[i],
+              asker: q[0],
+              arbitrator: q[1],
+              bondToken: q[2],
+              templateId: Number(q[3]),
+              timeoutSec: Number(q[4]),
+              openingTs: Number(q[5]),
+              contentHash: q[6],
+              createdAt: Number(q[7]),
+              content: q[8],
+              outcomesPacked: q[9],
+              language: q[10],
+              category: q[11],
+              metadataURI: q[12],
+              lastAnswerTs: Number(q[13]),
+              bestAnswer: q[14],
+              bestBond: BigInt(q[15] || 0),
+              finalized: !!q[16],
+              pendingArbitration: !!q[17],
+            }));
+            // Merge and sort by createdAt desc
+            const map = new Map<string, Full>();
+            for (const r of [...finalRows, ...extras]) map.set(r.id, r);
+            finalRows = Array.from(map.values()).sort((a,b)=> Number(b.createdAt||0) - Number(a.createdAt||0));
+          } catch {}
+        }
+      } catch {}
+
+      setRows(finalRows);
+      try {
+        localStorage.setItem(cacheKey(p), JSON.stringify({ t: Date.now(), total: tot, rows: finalRows }));
       } catch {}
     } catch (e: any) {
       // V3 failed, try V2 fallback with log scanning
