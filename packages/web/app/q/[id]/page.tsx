@@ -640,7 +640,7 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
       <div className="px-4 py-6 sm:px-0">
         {gated && (
           <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
-            Please connect KaiaWallet to the correct network (Mainnet {KAIA_MAINNET_ID} or Kairos {KAIA_TESTNET_ID}).
+            Please connect KaiaWallet to Kairos testnet (chain {KAIA_TESTNET_ID}).
           </div>
         )}
         <div className={`bg-white overflow-hidden shadow rounded-lg ${gated ? 'opacity-50' : ''}`}>

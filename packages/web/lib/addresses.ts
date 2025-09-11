@@ -44,7 +44,7 @@ export async function loadDeployments(chainId: number) {
  * Hook to load network-specific deployments
  * @param defaultChain - Chain ID to use when not connected (defaults to mainnet)
  */
-export function useNetworkDeployments(defaultChain = 8217) {
+export function useNetworkDeployments(defaultChain = 1001) {
   const chainId = useChainId() || defaultChain;
   const [data, setData] = useState<DeploymentSchema | null>(null);
   const [loading, setLoading] = useState(true);

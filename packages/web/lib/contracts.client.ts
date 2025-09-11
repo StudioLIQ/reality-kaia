@@ -3,7 +3,7 @@
 import { useNetworkDeployments } from "./addresses";
 
 export function useAddresses() {
-  const { chainId, deployments, ready, loading, error } = useNetworkDeployments(8217);
+  const { chainId, deployments, ready, loading, error } = useNetworkDeployments(1001);
   return {
     chainId,
     deployments,

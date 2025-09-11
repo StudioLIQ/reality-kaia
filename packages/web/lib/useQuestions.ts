@@ -27,10 +27,7 @@ export function useQuestions() {
   const [error, setErr] = useState<string | null>(null);
 
   // public RPC endpoints (env or sane defaults)
-  const rpc =
-    chainId === 8217
-      ? (process.env.NEXT_PUBLIC_RPC_MAINNET ?? "https://public-en.node.kaia.io")
-      : (process.env.NEXT_PUBLIC_RPC_TESTNET ?? "https://public-en-kairos.node.kaia.io");
+  const rpc = process.env.NEXT_PUBLIC_RPC_TESTNET ?? "https://public-en-kairos.node.kaia.io";
 
   const client = useMemo(
     // Avoid strict chain binding so the RPC URL decides the network

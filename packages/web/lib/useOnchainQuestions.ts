@@ -29,7 +29,7 @@ type Full = {
 };
 
 export function useOnchainQuestions(pageSize = 20) {
-  const chainId = useChainId() || 8217;
+  const chainId = useChainId() || 1001;
   const { addr, ready } = useAddresses();
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -37,10 +37,7 @@ export function useOnchainQuestions(pageSize = 20) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  const rpc =
-    chainId === 8217
-      ? process.env.NEXT_PUBLIC_RPC_MAINNET ?? "https://public-en.node.kaia.io"
-      : process.env.NEXT_PUBLIC_RPC_TESTNET ?? "https://public-en-kairos.node.kaia.io";
+  const rpc = process.env.NEXT_PUBLIC_RPC_TESTNET ?? "https://public-en-kairos.node.kaia.io";
   const client = useMemo(() => createPublicClient({ transport: http(rpc) } as any), [rpc]);
 
   const cacheKey = (p: number) => `ora:q:${chainId}:${p}:${pageSize}`;

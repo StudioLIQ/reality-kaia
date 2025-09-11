@@ -8,8 +8,8 @@ export type NetStatus = "NOT_CONNECTED" | "WRONG_NETWORK" | "MAINNET" | "TESTNET
 
 const statusOf = (connected: boolean, id?: number): NetStatus => {
   if (!connected) return "NOT_CONNECTED";
-  if (id === KAIA_MAINNET_ID) return "MAINNET";
   if (id === KAIA_TESTNET_ID) return "TESTNET";
+  // Temporarily treat mainnet and others as wrong network
   return "WRONG_NETWORK";
 };
 
