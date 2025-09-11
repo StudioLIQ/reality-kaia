@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAccount, useWalletClient, useChainId, usePublicClient } from 'wagmi'
-import { parseUnits, keccak256, toBytes, decodeEventLog } from 'viem'
+import { parseUnits, keccak256, toBytes, decodeEventLog, encodeAbiParameters } from 'viem'
 import { 
   REALITIO_ERC20_ABI, 
   ERC20_ABI,
@@ -223,8 +223,16 @@ export default function CreateQuestion() {
         throw new Error('Contract addresses not found')
       }
 
+      // Strengthen uniqueness: include current timestamp into the nonce entropy
       const randomValue = crypto.getRandomValues(new Uint8Array(32))
-      const nonce = keccak256(randomValue)
+      const randHash = keccak256(randomValue)
+      const nowSec = BigInt(Math.floor(Date.now() / 1000))
+      const nonce = keccak256(
+        encodeAbiParameters(
+          [ { type: 'bytes32' }, { type: 'uint64' } ],
+          [ randHash, nowSec ]
+        )
+      )
       
       const arbitratorAddress = formData.arbitrator || addr.arbitrator || deployments?.arbitratorSimple
       // Contract requires openingTs >= block.timestamp OR 0. For "Now", pass 0 to avoid race.

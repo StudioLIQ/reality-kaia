@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { formatEther } from "viem";
+import { formatUnits } from "viem";
 import { useAddresses } from "@/lib/contracts.client";
 import { useOnchainQuestions } from "@/lib/useOnchainQuestions";
 import QuestionFilters, { type QuestionRow } from "@/components/QuestionFilters";
@@ -13,19 +13,30 @@ import FlashBanner from "@/components/FlashBanner";
 export default function DashboardPage() {
   const { chainId, addr, ready: addrReady, loading: addrLoading, error: addrError } = useAddresses();
   const { total, page, setPage, pageSize, rows: items, loading, err: error } = useOnchainQuestions(20);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedAsker, setCopiedAsker] = useState<string | null>(null);
+  const [copiedOpen, setCopiedOpen] = useState<string | null>(null);
+  const [copiedDeadline, setCopiedDeadline] = useState<string | null>(null);
 
   // map to QuestionRow shape filters expect
-  const rows: QuestionRow[] = useMemo(() => items.map((q) => ({
-    id: q.id,
-    asker: q.asker,
-    createdAt: q.createdAt,
-    openingTs: q.openingTs,
-    timeoutSec: q.timeoutSec,
-    finalized: q.finalized,
-    bondTokenSymbol: undefined,
-    currentBondRaw: q.bestBond || undefined,
-    text: q.content,
-  })), [items]);
+  const rows: QuestionRow[] = useMemo(() => items.map((q) => {
+    const usdt = addr.usdt?.toLowerCase();
+    const wkaia = addr.wkaia?.toLowerCase();
+    const token = (q as any).bondToken?.toLowerCase?.();
+    const symbol = token && usdt && token === usdt ? 'USDT' : token && wkaia && token === wkaia ? 'WKAIA' : undefined;
+    return {
+      id: q.id,
+      asker: q.asker,
+      createdAt: q.createdAt,
+      openingTs: q.openingTs,
+      timeoutSec: q.timeoutSec,
+      finalized: q.finalized,
+      bondTokenSymbol: symbol as any,
+      bondTokenAddress: (q as any).bondToken,
+      currentBondRaw: q.bestBond || undefined,
+      text: q.content,
+    } as QuestionRow;
+  }), [items, addr.usdt, addr.wkaia]);
 
   const [filtered, setFiltered] = useState<QuestionRow[]>([]);
   
@@ -121,6 +132,7 @@ export default function DashboardPage() {
             <tr>
               <Th>Question</Th>
               <Th>Status</Th>
+              <Th align="right">Bond</Th>
               <Th align="center">Opens</Th>
               <Th align="center">Deadline</Th>
               <Th align="center">Action</Th>
@@ -143,7 +155,42 @@ export default function DashboardPage() {
                   <Td>
                     <div className="max-w-xs">
                       <p className="text-white font-medium truncate">{q.text || q.question || q.id}</p>
-                      <p className="text-xs text-white/40 mt-1">ID: {q.id.slice(0, 10)}...</p>
+                      {q.finalized && (
+                        <div className="mt-1">
+                          <span className="inline-flex px-2 py-0.5 text-[11px] rounded-full border border-white/10 bg-white/5 text-white/60">
+                            ✔ Finalized
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-white/40 mt-1">
+                        <span>ID: {q.id.slice(0, 10)}...</span>
+                        <button
+                          type="button"
+                          className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
+                          onClick={async () => { try { await navigator.clipboard.writeText(q.id); } catch {}; setCopiedId(q.id); setTimeout(()=> setCopiedId(null), 1200); }}
+                          title="Copy full ID"
+                        >
+                          📋 {copiedId === q.id ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div className="text-xs text-white/40 mt-1 flex items-center gap-2 flex-wrap">
+                        {q.asker && (
+                          <>
+                            <span>Asker: {q.asker.slice(0, 6)}…{q.asker.slice(-4)}</span>
+                            <button
+                              type="button"
+                              className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
+                              onClick={async () => { try { await navigator.clipboard.writeText(q.asker!); } catch {}; setCopiedAsker(q.id); setTimeout(()=> setCopiedAsker(null), 1200); }}
+                              title="Copy asker address"
+                            >
+                              📋 {copiedAsker === q.id ? 'Copied' : 'Copy'}
+                            </button>
+                          </>
+                        )}
+                        {q.createdAt && (
+                          <span title={`unix: ${q.createdAt}`}>• Created: {new Date(Number(q.createdAt) * 1000).toLocaleString()}</span>
+                        )}
+                      </div>
                     </div>
                   </Td>
                   <Td>
@@ -151,11 +198,53 @@ export default function DashboardPage() {
                       {status.charAt(0) + status.slice(1).toLowerCase()}
                     </span>
                   </Td>
-                  <Td align="center" className="text-white/60 text-sm">
-                    {q.openingTs ? new Date(q.openingTs * 1000).toLocaleString() : "-"}
+                  <Td align="right" className="text-white/70 text-sm" title={(() => {
+                    const raw = q.currentBondRaw as any as bigint | undefined;
+                    const token = q.bondTokenAddress as string | undefined;
+                    const tokenInfo = token ? ` | token: ${token}` : '';
+                    return raw && raw !== 0n ? `${raw.toString()} (raw)${tokenInfo}` : token ? `token: ${token}` : '';
+                  })()}>
+                    {(() => {
+                      const raw = q.currentBondRaw as any as bigint | undefined;
+                      if (!raw || raw === 0n) return '-';
+                      const d = q.bondTokenSymbol === 'USDT' ? 6 : 18;
+                      const sym = q.bondTokenSymbol || '';
+                      return `${formatUnits(raw, d)} ${sym}`;
+                    })()}
                   </Td>
-                  <Td align="center" className="text-white/60 text-sm">
-                    {deadline ? new Date(deadline * 1000).toLocaleString() : "-"}
+                  <Td align="center" className="text-white/60 text-sm" title={q.openingTs ? `unix: ${q.openingTs}` : ''}>
+                    {q.openingTs ? (
+                      <div className="inline-flex items-center gap-2">
+                        <span>{new Date(q.openingTs * 1000).toLocaleString()}</span>
+                        <button
+                          type="button"
+                          className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
+                          onClick={async () => { try { await navigator.clipboard.writeText(String(q.openingTs)); } catch {}; setCopiedOpen(q.id); setTimeout(()=> setCopiedOpen(null), 1200); }}
+                          title="Copy unix timestamp"
+                        >
+                          📋 {copiedOpen === q.id ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    ) : (
+                      '-'
+                    )}
+                  </Td>
+                  <Td align="center" className="text-white/60 text-sm" title={deadline ? `unix: ${deadline}` : ''}>
+                    {deadline ? (
+                      <div className="inline-flex items-center gap-2">
+                        <span>{new Date(deadline * 1000).toLocaleString()}</span>
+                        <button
+                          type="button"
+                          className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
+                          onClick={async () => { try { await navigator.clipboard.writeText(String(deadline)); } catch {}; setCopiedDeadline(q.id); setTimeout(()=> setCopiedDeadline(null), 1200); }}
+                          title="Copy unix timestamp"
+                        >
+                          📋 {copiedDeadline === q.id ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    ) : (
+                      '-'
+                    )}
                   </Td>
                   <Td align="center">
                     <Link

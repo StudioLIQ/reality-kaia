@@ -11,6 +11,8 @@
     "test": "vitest --run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "seed:questions": "node scripts/seed-questions.mjs",
+    "seed:questions:wkaia": "BOND_TOKEN=WKAIA node scripts/seed-questions.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

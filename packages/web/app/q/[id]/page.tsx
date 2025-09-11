@@ -59,6 +59,7 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
   const [deploymentsState, setDeploymentsState] = useState<any>(null)
   const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
   const [wkaiaAmount, setWkaiaAmount] = useState<bigint>(0n)
+  const [copiedBest, setCopiedBest] = useState(false)
 
   const loadQuestion = useCallback(async () => {
     if (!publicClient || !questionId) return
@@ -199,22 +200,22 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
 
   // Initialize Permit2 hooks
   const { signPermit2 } = usePermit2({
-    bondToken: question?.bondToken as `0x${string}`,
-    realitioAddress: deploymentsState?.realitioERC20 as `0x${string}`,
-    permit2Address: deploymentsState?.PERMIT2 as `0x${string}`,
+    bondToken: (question?.bondToken || '0x0000000000000000000000000000000000000000') as `0x${string}`,
+    realitioAddress: (addr.reality || '0x0000000000000000000000000000000000000000') as `0x${string}`,
+    permit2Address: (deploymentsState?.PERMIT2 || '0x0000000000000000000000000000000000000000') as `0x${string}`,
     chainId
   })
   
   const { signPermit2612 } = usePermit2612({
-    bondToken: question?.bondToken as `0x${string}`,
-    realitioAddress: deploymentsState?.realitioERC20 as `0x${string}`,
+    bondToken: (question?.bondToken || '0x0000000000000000000000000000000000000000') as `0x${string}`,
+    realitioAddress: (addr.reality || '0x0000000000000000000000000000000000000000') as `0x${string}`,
     chainId
   })
   
   // Calculate fee when bond amount changes
   useEffect(() => {
     async function calculateFeeQuote() {
-      if (!bondTokenInfo || !publicClient || !answerForm.bond || !deploymentsState?.realitioERC20) return
+      if (!bondTokenInfo || !publicClient || !answerForm.bond || !addr.reality) return
       
       try {
         const bondRaw = bondTokenInfo?.decimals
@@ -223,7 +224,7 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
         
         const quote = await quoteFee({
           client: publicClient,
-          reality: deploymentsState.realitioERC20 as `0x${string}`,
+          reality: addr.reality as `0x${string}`,
           bondTokenDecimals: bondTokenInfo?.decimals || 18,
           bondRaw,
           feeBpsFallback: feeInfo?.feeBps || 25
@@ -638,7 +639,53 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
     Date.now() / 1000 > Number(question.lastAnswerTs) + Number(question.timeout) &&
     !question.finalized
 
-  const minBond = question.bestBond > 0 ? BigInt(question.bestBond) * BigInt(2) : BigInt(1)
+  const toBigIntSafe = (v: any): bigint => {
+    try {
+      if (typeof v === 'bigint') return v
+      if (typeof v === 'number') return BigInt(v)
+      if (typeof v === 'string') return v ? BigInt(v) : 0n
+      return 0n
+    } catch { return 0n }
+  }
+
+  const bestBondRaw = toBigIntSafe(question.bestBond)
+  const minBond = bestBondRaw > 0n ? bestBondRaw * 2n : 1n
+  const tokenDecimals = bondTokenInfo?.decimals || 18
+  const tokenSymbol = bondTokenInfo?.symbol || 'KAIA'
+
+  const bestBondFormatted = formatUnits(bestBondRaw, tokenDecimals)
+  const minBondFormatted = formatUnits(minBond, tokenDecimals)
+
+  const bestAnswerHex = (question.bestAnswer || '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`
+  const isNoAnswer = /^0x0+$/.test(bestAnswerHex.slice(2))
+  const templateIdNum = Number(questionMetadata?.templateId || 0)
+  const outcomes = (questionMetadata?.outcomesPacked ? String(questionMetadata.outcomesPacked).split('\u001F') : []) as string[]
+  const formatBestAnswer = (): { label: string; meta?: string } => {
+    if (isNoAnswer) return { label: 'No answers yet' }
+    let n: bigint | null = null
+    try { n = BigInt(bestAnswerHex) } catch { n = null }
+    if (templateIdNum === 1) {
+      if (n === 1n) return { label: 'YES' }
+      if (n === 0n) return { label: 'NO' }
+    }
+    if (templateIdNum === 3 && n !== null) {
+      const idx = Number(n)
+      if (idx >= 0 && idx < outcomes.length) {
+        const letter = String.fromCharCode(65 + idx)
+        return { label: `${letter}) ${outcomes[idx]}` }
+      }
+    }
+    if (templateIdNum === 4 && n !== null) {
+      return { label: n.toString() }
+    }
+    if (templateIdNum === 5 && n !== null) {
+      const ts = Number(n)
+      if (Number.isFinite(ts) && ts > 0) return { label: new Date(ts * 1000).toLocaleString(), meta: `${ts}` }
+    }
+    // text / unknown: show short hash
+    return { label: `${bestAnswerHex.slice(0, 10)}…`, meta: 'bytes32' }
+  }
+  const bestAnswerDisplay = formatBestAnswer()
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -646,6 +693,11 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
         {gated && (
           <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-4 py-3 text-sm">
             Please connect KaiaWallet to Kairos testnet (chain {KAIA_TESTNET_ID}).
+          </div>
+        )}
+        {!addr.reality && (
+          <div className="mb-4 rounded-lg border border-red-400/30 bg-red-400/10 text-red-300 px-4 py-3 text-sm">
+            Missing Realitio contract address for this network. Please check deployments.
           </div>
         )}
         <div className={`rounded-2xl border border-white/10 bg-neutral-950 p-6 ${gated ? 'opacity-50' : ''}`}>
@@ -792,18 +844,38 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
               </div>
               
               <div>
-                <p className="text-sm text-white/60">Current Best Answer</p>
-                <p className="font-mono text-white/90 break-all">{question.bestAnswer || 'None'}</p>
+                <p className="text-sm text-white/60">Best Answer</p>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 text-xs">
+                    {bestAnswerDisplay.label}
+                  </span>
+                  {bestAnswerDisplay.meta && (
+                    <span className="text-xs text-white/50">{bestAnswerDisplay.meta}</span>
+                  )}
+                  {bestAnswerDisplay.meta === 'bytes32' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try { await navigator.clipboard.writeText(bestAnswerHex); } catch {}
+                        setCopiedBest(true); setTimeout(() => setCopiedBest(false), 1200)
+                      }}
+                      className="inline-flex items-center px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white text-[11px]"
+                      title="Copy raw bytes32"
+                    >
+                      📋 {copiedBest ? 'Copied' : 'Copy'}
+                    </button>
+                  )}
+                </div>
               </div>
               
               <div>
-                <p className="text-sm text-white/60">Current Best Bond</p>
-                <p className="text-white/90">{question.bestBond ? formatEther(question.bestBond) : '0'} {bondTokenInfo?.symbol || 'KAIA'}</p>
+                <p className="text-sm text-white/60">Best Bond</p>
+                <p className="text-white/90">{bestBondFormatted} {tokenSymbol}</p>
               </div>
               
               <div>
                 <p className="text-sm text-white/60">Minimum Next Bond</p>
-                <p className="text-white/90">{formatEther(minBond)} {bondTokenInfo?.symbol || 'KAIA'}</p>
+                <p className="text-white/90">{minBondFormatted} {tokenSymbol}</p>
               </div>
               
               {question.finalized && (
@@ -978,6 +1050,8 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
                         deployments={deployments}
                         onModeChange={setPaymentMode}
                         onWkaiaAmountChange={setWkaiaAmount}
+                        decimals={bondTokenInfo?.decimals || 18}
+                        symbol={bondTokenInfo?.symbol || 'TOKEN'}
                       />
                     )}
                     
@@ -986,13 +1060,21 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
                         <DisclaimerBadge compact />
                         <button
                           onClick={handleSubmitAnswer}
-                          disabled={actionLoading || !address || gated}
+                          disabled={actionLoading || !address || gated || !addr.reality || (paymentMode === 'permit2' && !deployments?.PERMIT2)}
                           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {actionLoading ? 'Submitting...' : 'Submit Answer'}
                         </button>
                       </div>
                     </DisclaimerGate>
+                    {(!addr.reality || (paymentMode === 'permit2' && !deployments?.PERMIT2)) && (
+                      <div className="mt-2 text-xs text-red-300">
+                        {!addr.reality && <p>Missing Realitio contract address for this network.</p>}
+                        {paymentMode === 'permit2' && !deployments?.PERMIT2 && (
+                          <p>Permit2 is not available on this network. Choose another method.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 

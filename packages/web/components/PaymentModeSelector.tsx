@@ -23,6 +23,8 @@ interface PaymentModeSelectorProps {
   deployments: any
   onModeChange: (mode: PaymentMode) => void
   onWkaiaAmountChange?: (amount: bigint) => void
+  decimals?: number
+  symbol?: string
 }
 
 export function PaymentModeSelector({ 
@@ -31,7 +33,9 @@ export function PaymentModeSelector({
   feeAmount, 
   deployments,
   onModeChange,
-  onWkaiaAmountChange 
+  onWkaiaAmountChange,
+  decimals = 18,
+  symbol = 'TOKEN'
 }: PaymentModeSelectorProps) {
   const [selectedMode, setSelectedMode] = useState<PaymentMode>('permit2')
   const [wkaiaAmount, setWkaiaAmount] = useState<bigint>(0n)
@@ -112,28 +116,31 @@ export function PaymentModeSelector({
   
   return (
     <div className="space-y-4">
-      <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4">
-        <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Payment Summary</h3>
+      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+        <h3 className="font-medium text-white mb-2">Payment Summary</h3>
         <div className="space-y-1 text-sm">
           <div className="flex justify-between">
-            <span className="text-blue-600 dark:text-blue-400">Bond Amount:</span>
-            <span className="font-mono">{formatUnits(bondAmount, 6)} USDT</span>
+            <span className="text-white/70">Bond Amount:</span>
+            <span className="font-mono text-white/90">{formatUnits(bondAmount, decimals)} {symbol}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-blue-600 dark:text-blue-400">Fee (0.25%):</span>
-            <span className="font-mono">{formatUnits(feeAmount, 6)} USDT</span>
+            <span className="text-white/70">Fee:</span>
+            <span className="font-mono text-white/90">{formatUnits(feeAmount, decimals)} {symbol}</span>
           </div>
-          <div className="flex justify-between pt-1 border-t border-blue-200 dark:border-blue-800">
-            <span className="font-medium text-blue-900 dark:text-blue-100">Total:</span>
-            <span className="font-mono font-medium">{formatUnits(total, 6)} USDT</span>
+          <div className="flex justify-between pt-1 border-t border-white/10">
+            <span className="font-medium text-white">Total:</span>
+            <span className="font-mono font-medium text-white/90">{formatUnits(total, decimals)} {symbol}</span>
           </div>
         </div>
       </div>
       
       <div>
-        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-          Payment Method
-        </h3>
+        <h3 className="text-sm font-medium text-white mb-2">Payment Method</h3>
+        {!hasPermit2 && (
+          <div className="mb-3 rounded-md border border-amber-400/30 bg-amber-400/10 text-amber-300 px-3 py-2 text-xs">
+            Permit2 address missing on this network; Permit2 option is disabled.
+          </div>
+        )}
         
         <RadioGroup value={selectedMode} onChange={(value) => {
           setSelectedMode(value)
@@ -146,10 +153,10 @@ export function PaymentModeSelector({
                 value={mode.id}
                 disabled={!mode.available}
                 className={({ active, checked }) =>
-                  `${active ? 'ring-2 ring-offset-2 ring-blue-500' : ''}
-                   ${checked && mode.available ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-500' : 
-                     mode.available ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 
-                     'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'}
+                  `${active ? 'ring-2 ring-emerald-400/40' : ''}
+                   ${checked && mode.available ? 'bg-emerald-400/10 border-emerald-400/30' : 
+                     mode.available ? 'bg-white/5 border-white/10' : 
+                     'bg-white/5 border-white/10 opacity-50 cursor-not-allowed'}
                    relative rounded-lg border px-4 py-3 cursor-pointer focus:outline-none`
                 }
               >
@@ -159,29 +166,25 @@ export function PaymentModeSelector({
                       <div className="text-sm">
                         <RadioGroup.Label
                           as="p"
-                          className={`font-medium ${
-                            mode.available ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'
-                          }`}
+                          className={`font-medium ${mode.available ? 'text-white' : 'text-white/50'}`}
                         >
                           {mode.name}
                           {mode.id === 'permit2' && hasPermit2 && (
-                            <span className="ml-2 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                            <span className="ml-2 text-xs border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 px-2 py-0.5 rounded">
                               Recommended
                             </span>
                           )}
                         </RadioGroup.Label>
                         <RadioGroup.Description
                           as="span"
-                          className={`inline ${
-                            mode.available ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600'
-                          }`}
+                          className={`inline ${mode.available ? 'text-white/60' : 'text-white/40'}`}
                         >
                           <span>{mode.description}</span>
                         </RadioGroup.Description>
                       </div>
                     </div>
                     {checked && mode.available && (
-                      <div className="flex-shrink-0 text-blue-600 dark:text-blue-400">
+                      <div className="flex-shrink-0 text-emerald-300">
                         <CheckCircleIcon className="h-5 w-5" />
                       </div>
                     )}
@@ -193,13 +196,11 @@ export function PaymentModeSelector({
         </RadioGroup>
         
         {selectedMode === 'mixed' && isWKAIA && (
-          <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
-            <h4 className="text-sm font-medium text-amber-900 dark:text-amber-100 mb-2">
-              Mixed Payment Configuration
-            </h4>
+          <div className="mt-4 p-4 rounded-lg border border-amber-400/30 bg-amber-400/10">
+            <h4 className="text-sm font-medium text-amber-300 mb-2">Mixed Payment Configuration</h4>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm text-amber-700 dark:text-amber-300 mb-1">
+                <label className="block text-sm text-amber-300 mb-1">
                   WKAIA Amount to Use (max: {formatUnits(total, 18)} WKAIA)
                 </label>
                 <input
@@ -208,7 +209,7 @@ export function PaymentModeSelector({
                   min="0"
                   max={formatUnits(total, 18)}
                   placeholder="0.0"
-                  className="w-full px-3 py-2 border border-amber-300 dark:border-amber-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  className="w-full px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-white"
                   onChange={(e) => {
                     const value = e.target.value ? parseFloat(e.target.value) : 0
                     const wkaiaBigInt = BigInt(Math.floor(value * 1e18))
@@ -217,19 +218,17 @@ export function PaymentModeSelector({
                   }}
                 />
               </div>
-              <div className="text-sm space-y-1">
-                <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                  <span>WKAIA portion:</span>
-                  <span className="font-mono">{formatUnits(wkaiaAmount, 18)} WKAIA</span>
+              <div className="text-sm space-y-1 text-white/70">
+                <div className="flex justify-between">
+                  <span>From WKAIA:</span>
+                  <span className="font-mono text-white/90">{formatUnits(wkaiaAmount, 18)} WKAIA</span>
                 </div>
-                <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                  <span>KAIA to wrap:</span>
-                  <span className="font-mono">{formatUnits(total > wkaiaAmount ? total - wkaiaAmount : 0n, 18)} KAIA</span>
+                <div className="flex justify-between">
+                  <span>From KAIA:</span>
+                  <span className="font-mono text-white/90">{formatUnits(total > wkaiaAmount ? total - wkaiaAmount : 0n, 18)} KAIA</span>
                 </div>
               </div>
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                The zapper will use your WKAIA first, then automatically wrap native KAIA for the remainder.
-              </p>
+              <p className="text-xs text-amber-300">The zapper uses WKAIA first, then wraps native KAIA for the remainder.</p>
             </div>
           </div>
         )}
