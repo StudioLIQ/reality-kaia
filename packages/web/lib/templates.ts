@@ -19,7 +19,10 @@ export const TEMPLATES: TemplateSpec[] = [
       "Avoid subjective or ambiguous terms.",
       "Consider edge cases explicitly in the question."
     ],
-    sample: "Will BTC close above $70k on 2025-12-31 00:00 UTC?\nAnswers: YES/NO",
+    sample: [
+      "BTC: Did BTC-USD trade at or above $70,000 on Coinbase between 2025-03-01 00:00:00 UTC and 2025-03-31 23:59:59 UTC?",
+      "Sports: Did Spain win the UEFA Euro 2024 Final in regular time against England on 2024-07-14?",
+    ].join("\n\n"),
     answerType: "binary",
     badges: ["Simple", "Popular"],
   },
@@ -33,7 +36,10 @@ export const TEMPLATES: TemplateSpec[] = [
       "Include 'None of the above' if appropriate.",
       "Maximum 10 choices recommended."
     ],
-    sample: "Who will win Kaia Cup 2025?\nChoices: A) Team Alpha, B) Team Beta, C) Draw",
+    sample: [
+      "BTC: What was BTC-USD’s 24h performance on Coinbase on 2025-03-15 (close-to-close, nearest 0.1%)?\\nChoices: A) Up 5%+, B) Up 0–5%, C) Flat (±0.5%), D) Down 0–5%, E) Down 5%+",
+      "Sports: Who won the 2024 NBA Finals?\\nChoices: A) Boston Celtics, B) Dallas Mavericks",
+    ].join("\n\n"),
     answerType: "multi",
     badges: ["Poll"],
   },
@@ -47,7 +53,10 @@ export const TEMPLATES: TemplateSpec[] = [
       "Specify data source if applicable.",
       "Consider using 0 for 'unknown' or 'N/A'."
     ],
-    sample: "Total transactions on Kaia on 2025-10-01? (integer, unit=tx)",
+    sample: [
+      "BTC: What was the BTC-USD price on Coinbase at 2025-03-15 12:00:00 UTC? (answer = integer USD, rounded to nearest dollar)",
+      "Sports: How many total goals were scored in the 2024 UEFA Champions League Final (Real Madrid vs Borussia Dortmund on 2024-06-01)? (answer = integer, unit=goals)",
+    ].join("\n\n"),
     answerType: "integer",
     badges: ["Stats"],
   },
@@ -61,7 +70,10 @@ export const TEMPLATES: TemplateSpec[] = [
       "Use 0 for 'never happened'.",
       "Specify precision requirements."
     ],
-    sample: "When will contract X be deployed? (answer = unix seconds, UTC)",
+    sample: [
+      "BTC: When did BTC-USD first trade above $70,000 on Coinbase after 2025-03-01 00:00:00 UTC? (answer = unix seconds, UTC)",
+      "Sports: What was the official kickoff time (UTC) of Super Bowl LVIII (2024-02-11)? (answer = unix seconds, UTC)",
+    ].join("\n\n"),
     answerType: "datetime",
     badges: ["UTC"],
   },
@@ -75,7 +87,10 @@ export const TEMPLATES: TemplateSpec[] = [
       "Define case sensitivity and whitespace handling.",
       "Consider using keccak256 for consistency."
     ],
-    sample: "What is the secret code? (keccak256(lowercase(trimmed)))",
+    sample: [
+      "BTC: What is the Coinbase ticker symbol used for bitcoin quoted in USD? (answer = uppercase ticker; verify via keccak256(lowercase(trimmed)))",
+      "Sports: Who was awarded Super Bowl LVIII MVP? (answer = full name per NFL.com; verify via keccak256(lowercase(trimmed)))",
+    ].join("\n\n"),
     answerType: "text",
     badges: ["Privacy"],
   },

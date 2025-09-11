@@ -11,8 +11,37 @@
 // - No tokens are spent on creation.
 
 import { readFile } from 'node:fs/promises'
-import { createWalletClient, createPublicClient, http, keccak256, toHex, encodeAbiParameters } from 'viem'
+import { readFileSync } from 'node:fs'
+import { createWalletClient, createPublicClient, http, keccak256, toHex, toBytes, encodeAbiParameters } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
+
+// Load environment variables from .env files in the web folder
+function loadEnvFrom(relativePath) {
+  try {
+    const url = new URL(relativePath, import.meta.url)
+    const text = readFileSync(url, 'utf8')
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim()
+      if (!line || line.startsWith('#')) continue
+      const i = line.indexOf('=')
+      if (i < 0) continue
+      const key = line.slice(0, i).trim()
+      let val = line.slice(i + 1).trim()
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith('\'') && val.endsWith('\''))) {
+        val = val.slice(1, -1)
+      }
+      if (!process.env[key]) process.env[key] = val
+    }
+  } catch {}
+}
+
+// Try loading from web/.env* and repo root ../../.env*
+loadEnvFrom('../.env')
+loadEnvFrom('../.env.local')
+loadEnvFrom('../../.env') // packages/.env (if present)
+loadEnvFrom('../../.env.local')
+loadEnvFrom('../../../.env') // repo root .env
+loadEnvFrom('../../../.env.local')
 
 const CHAIN_ID = Number(process.env.CHAIN_ID || '1001')
 const RPC_URL = process.env.RPC_URL || (CHAIN_ID === 8217
@@ -28,7 +57,7 @@ if (!PK) {
   process.exit(1)
 }
 
-// Minimal ABI (V3 write + V1 event for questionId)
+// Minimal ABI (V3 write/read + V1 event for questionId)
 const ABI = [
   {
     type: 'function', name: 'askQuestionERC20V3', stateMutability: 'nonpayable',
@@ -46,6 +75,32 @@ const ABI = [
       { type: 'string',  name: 'metadataURI' }
     ],
     outputs: [{ type: 'bytes32' }]
+  },
+  {
+    type: 'function', name: 'getQuestionFullV3', stateMutability: 'view',
+    inputs: [{ type: 'bytes32', name: 'questionId' }],
+    outputs: [{
+      type: 'tuple', components: [
+        { type: 'address', name: 'asker' },
+        { type: 'address', name: 'arbitrator' },
+        { type: 'address', name: 'bondToken' },
+        { type: 'uint32',  name: 'templateId' },
+        { type: 'uint32',  name: 'timeout' },
+        { type: 'uint32',  name: 'openingTs' },
+        { type: 'bytes32', name: 'contentHash' },
+        { type: 'uint64',  name: 'createdAt' },
+        { type: 'string',  name: 'content' },
+        { type: 'string',  name: 'outcomesPacked' },
+        { type: 'string',  name: 'language' },
+        { type: 'string',  name: 'category' },
+        { type: 'string',  name: 'metadataURI' },
+        { type: 'uint64',  name: 'lastAnswerTs' },
+        { type: 'bytes32', name: 'bestAnswer' },
+        { type: 'uint256', name: 'bestBond' },
+        { type: 'bool',    name: 'finalized' },
+        { type: 'bool',    name: 'pendingArbitration' },
+      ]
+    }]
   },
   {
     type: 'event', name: 'LogNewQuestion',
@@ -69,13 +124,28 @@ function outcomesJoin(arr) {
   return Array.isArray(arr) ? arr.join('\u001F') : ''
 }
 
-function makeNonce() {
-  const rand = crypto.getRandomValues(new Uint8Array(32))
-  const randHash = keccak256(rand)
-  const nowSec = BigInt(Math.floor(Date.now() / 1000))
+// Deterministic nonce so the same example question is idempotent across runs.
+const NONCE_SALT = 'oo:examples:v1'
+function deterministicNonce(q, arbitrator, timeout, openingTs) {
   return keccak256(encodeAbiParameters([
-    { type: 'bytes32' }, { type: 'uint64' }
-  ], [randHash, nowSec]))
+    { type: 'uint32' },   // templateId
+    { type: 'bytes32' },  // contentHash
+    { type: 'string' },   // outcomesPacked
+    { type: 'address' },  // arbitrator
+    { type: 'uint32' },   // timeout
+    { type: 'uint32' },   // openingTs
+    { type: 'string' },   // category
+    { type: 'string' },   // salt
+  ], [
+    q.templateId,
+    keccak256(toBytes(q.content)),
+    outcomesJoin(q.outcomes),
+    arbitrator,
+    timeout,
+    openingTs,
+    q.category || '',
+    NONCE_SALT,
+  ]))
 }
 
 async function main() {
@@ -99,40 +169,65 @@ async function main() {
   const walletClient = createWalletClient({ account, transport: http(RPC_URL) })
 
   const Q = [
-    // Template 1: Binary
+    // Template 1: Binary (BTC)
     {
       templateId: 1,
-      content: 'Will BTC close above $70,000 on 2025-12-31 00:00 UTC?\nAnswers: YES/NO',
+      content: 'Did BTC-USD trade at or above $70,000 on Coinbase between 2025-03-01 00:00:00 UTC and 2025-03-31 23:59:59 UTC?\nAnswers: YES/NO',
       outcomes: [], category: 'Markets',
     },
+    // Template 1: Binary (Sports)
     {
       templateId: 1,
-      content: 'Will Kaia mainnet reach block 100,000,000 before 2026-01-01 00:00 UTC?\nAnswers: YES/NO',
-      outcomes: [], category: 'Blockchain',
+      content: 'Did Spain win the UEFA Euro 2024 Final in regular time against England on 2024-07-14?\nAnswers: YES/NO',
+      outcomes: [], category: 'Sports',
     },
-    // Template 3: Multiple Choice
+    // Template 3: Multiple Choice (BTC)
     {
       templateId: 3,
-      content: 'Who will win the Kaia Cup 2025?\nChoices: A) Team Atlas, B) Team Borealis, C) Draw',
-      outcomes: ['Team Atlas', 'Team Borealis', 'Draw'], category: 'Sports',
+      content: 'What was BTC-USD\'s 24h performance on Coinbase on 2025-03-15 (close-to-close, nearest 0.1%)?\nChoices: A) Up 5%+, B) Up 0–5%, C) Flat (±0.5%), D) Down 0–5%, E) Down 5%+',
+      outcomes: ['Up 5%+', 'Up 0–5%', 'Flat (±0.5%)', 'Down 0–5%', 'Down 5%+'], category: 'Markets',
     },
-    // Template 4: Integer
+    // Template 3: Multiple Choice (Sports)
+    {
+      templateId: 3,
+      content: 'Who won the 2024 NBA Finals?\nChoices: A) Boston Celtics, B) Dallas Mavericks',
+      outcomes: ['Boston Celtics', 'Dallas Mavericks'], category: 'Sports',
+    },
+    // Template 4: Integer (BTC)
     {
       templateId: 4,
-      content: 'How many daily active addresses on Kaia on 2025-10-01? (integer, unit=addresses)',
-      outcomes: [], category: 'Metrics',
+      content: 'What was the BTC-USD price on Coinbase at 2025-03-15 12:00:00 UTC? (answer = integer USD, rounded to nearest dollar)',
+      outcomes: [], category: 'Markets',
     },
-    // Template 5: Datetime
+    // Template 4: Integer (Sports)
+    {
+      templateId: 4,
+      content: 'How many total goals were scored in the 2024 UEFA Champions League Final (Real Madrid vs Borussia Dortmund on 2024-06-01)? (answer = integer, unit=goals)',
+      outcomes: [], category: 'Sports',
+    },
+    // Template 5: Datetime (BTC)
     {
       templateId: 5,
-      content: 'When will contract 0x043c471bEe060e00A56CcD02c0Ca286808a5A436 be deployed on Kaia mainnet? (answer = unix seconds, UTC)',
-      outcomes: [], category: 'Releases',
+      content: 'When did BTC-USD first trade above $70,000 on Coinbase after 2025-03-01 00:00:00 UTC? (answer = unix seconds, UTC)',
+      outcomes: [], category: 'Markets',
     },
-    // Template 7: Text (hash)
+    // Template 5: Datetime (Sports)
+    {
+      templateId: 5,
+      content: 'What was the official kickoff time (UTC) of Super Bowl LVIII (Kansas City Chiefs vs San Francisco 49ers on 2024-02-11)? (answer = unix seconds, UTC)',
+      outcomes: [], category: 'Sports',
+    },
+    // Template 7: Text (hash) (BTC)
     {
       templateId: 7,
-      content: 'What is the verified release code name? (keccak256(lowercase(trimmed)))',
-      outcomes: [], category: 'Releases',
+      content: 'What is the Coinbase ticker symbol used for bitcoin quoted in USD? (answer = uppercase ticker; verify via keccak256(lowercase(trimmed)))',
+      outcomes: [], category: 'Markets',
+    },
+    // Template 7: Text (hash) (Sports)
+    {
+      templateId: 7,
+      content: 'Who was awarded Super Bowl LVIII MVP? (answer = full name per NFL.com; verify via keccak256(lowercase(trimmed)))',
+      outcomes: [], category: 'Sports',
     },
   ]
 
@@ -146,8 +241,47 @@ async function main() {
   console.log(`Bond Token: ${bondToken} (${TOKEN_PREF}${TOKEN_ADDR_OVERRIDE ? ' / override' : ''})`)
 
   for (const [i, q] of Q.entries()) {
-    const nonce = makeNonce()
     const outcomesPacked = outcomesJoin(q.outcomes)
+    const nonce = deterministicNonce(q, arbitrator, timeout, openingTs)
+
+    // Compute the expected questionId to make the operation idempotent
+    const questionId = keccak256(encodeAbiParameters([
+      { type: 'uint32' },
+      { type: 'bytes32' },
+      { type: 'address' },
+      { type: 'uint32' },
+      { type: 'uint32' },
+      { type: 'bytes32' },
+      { type: 'address' },
+    ], [
+      q.templateId,
+      keccak256(toBytes(q.content)),
+      arbitrator,
+      timeout,
+      openingTs,
+      nonce,
+      account.address,
+    ]))
+
+    // Check if question already exists (timeout > 0 means present)
+    let exists = false
+    try {
+      const full = await publicClient.readContract({
+        address: reality,
+        abi: ABI,
+        functionName: 'getQuestionFullV3',
+        args: [questionId],
+      })
+      const timeoutExisting = Number(full?.[4] ?? 0)
+      if (timeoutExisting > 0) exists = true
+    } catch {}
+
+    if (exists) {
+      console.log(`  [${i+1}/${Q.length}] SKIP (exists) ${q.templateId}: ${q.content.split('\n')[0]}`)
+      console.log(`    qid: ${questionId}`)
+      continue
+    }
+
     const hash = await walletClient.writeContract({
       address: reality,
       abi: ABI,
@@ -169,18 +303,18 @@ async function main() {
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash })
     // Extract questionId from logs
-    let questionId = null
+    let emittedQuestionId = null
     const topic = '0x' + keccak256(toHex('LogNewQuestion(bytes32,address,uint32,string,bytes32,address,uint32,uint32,bytes32,uint256)')).slice(2)
     for (const log of receipt.logs) {
       if (log.address.toLowerCase() !== reality.toLowerCase()) continue
       if (log.topics && log.topics[0] === topic && log.topics[1]) {
-        questionId = log.topics[1]
+        emittedQuestionId = log.topics[1]
         break
       }
     }
     console.log(`  [${i+1}/${Q.length}] ${q.templateId}: ${q.content.split('\n')[0]}`)
     console.log(`    tx: ${hash}`)
-    console.log(`    qid: ${questionId || '(not found in logs)'}`)
+    console.log(`    qid: ${emittedQuestionId || questionId}`)
   }
 
   console.log('Done.')

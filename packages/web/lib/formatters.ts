@@ -195,7 +195,7 @@ export function getQuestionTypeInfo(templateId: number | undefined): {
     3: { type: 'Multiple Choice', description: 'Select from predefined options', icon: '📝' },
     4: { type: 'Number', description: 'Numeric answer required', icon: '🔢' },
     5: { type: 'Date/Time', description: 'Timestamp answer', icon: '📅' },
-    6: { type: 'Text', description: 'Open text response', icon: '💬' },
+    7: { type: 'Text', description: 'Open text response', icon: '💬' },
   }
   
   return types[templateId || 0] || {
