@@ -198,7 +198,8 @@ export default function DashboardPage() {
                       {status.charAt(0) + status.slice(1).toLowerCase()}
                     </span>
                   </Td>
-                  <Td align="right" className="text-white/70 text-sm" title={(() => {
+                  <Td align="right" className="text-white/70 text-sm">
+                    <span title={(() => {
                     const raw = q.currentBondRaw as any as bigint | undefined;
                     const token = q.bondTokenAddress as string | undefined;
                     const tokenInfo = token ? ` | token: ${token}` : '';
@@ -211,11 +212,12 @@ export default function DashboardPage() {
                       const sym = q.bondTokenSymbol || '';
                       return `${formatUnits(raw, d)} ${sym}`;
                     })()}
+                    </span>
                   </Td>
-                  <Td align="center" className="text-white/60 text-sm" title={q.openingTs ? `unix: ${q.openingTs}` : ''}>
+                  <Td align="center" className="text-white/60 text-sm">
                     {q.openingTs ? (
                       <div className="inline-flex items-center gap-2">
-                        <span>{new Date(q.openingTs * 1000).toLocaleString()}</span>
+                        <span title={`unix: ${q.openingTs}`}>{new Date(q.openingTs * 1000).toLocaleString()}</span>
                         <button
                           type="button"
                           className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
@@ -229,10 +231,10 @@ export default function DashboardPage() {
                       '-'
                     )}
                   </Td>
-                  <Td align="center" className="text-white/60 text-sm" title={deadline ? `unix: ${deadline}` : ''}>
+                  <Td align="center" className="text-white/60 text-sm">
                     {deadline ? (
                       <div className="inline-flex items-center gap-2">
-                        <span>{new Date(deadline * 1000).toLocaleString()}</span>
+                        <span title={`unix: ${deadline}`}>{new Date(deadline * 1000).toLocaleString()}</span>
                         <button
                           type="button"
                           className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-white/70 hover:text-white"
