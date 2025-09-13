@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRouter } from 'next/navigation';
 import Link from "next/link";
 import { formatUnits } from "viem";
 import { useAddresses } from "@/lib/contracts.client";
@@ -12,6 +13,7 @@ import FlashBanner from "@/components/FlashBanner";
 import { formatAddress, formatDate, formatTokenAmount, getStatusStyle, truncateText, formatNumber, formatDuration } from "@/lib/formatters";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { chainId, addr, ready: addrReady, loading: addrLoading, error: addrError } = useAddresses();
   const { total, page, setPage, pageSize, rows: items, loading, err: error } = useOnchainQuestions(20);
 
@@ -166,8 +168,8 @@ export default function DashboardPage() {
             <tr>
               <Th>Question</Th>
               <Th>Status</Th>
-              <Th align="right">Current Bond</Th>
-              <Th align="center">Deadline</Th>
+              <Th align="right" className="hidden sm:table-cell">Current Bond</Th>
+              <Th align="center" className="hidden sm:table-cell">Deadline</Th>
               <Th align="center">Action</Th>
             </tr>
           </thead>
@@ -184,7 +186,7 @@ export default function DashboardPage() {
               } as const;
 
               return (
-                <TRow key={q.id}>
+                <TRow key={q.id} onClick={() => router.push(`/q/${q.id}`)}>
                   <Td>
                     <div className="max-w-md">
                       <div className="flex items-start gap-3">
@@ -220,7 +222,7 @@ export default function DashboardPage() {
                       {getStatusStyle(status).label}
                     </span>
                   </Td>
-                  <Td align="right">
+                  <Td align="right" className="hidden sm:table-cell">
                     <div className="text-sm">
                       {(() => {
                         const raw = q.currentBondRaw as any as bigint | undefined;
@@ -244,7 +246,7 @@ export default function DashboardPage() {
                       })()}
                     </div>
                   </Td>
-                  <Td align="center">
+                  <Td align="center" className="hidden sm:table-cell">
                     <div className="text-xs">
                       {deadline ? (
                         <div className="flex items-center gap-1">
@@ -274,6 +276,7 @@ export default function DashboardPage() {
                   <Td align="center">
                     <Link
                       href={`/q/${q.id}`}
+                      onClick={(e) => e.stopPropagation()}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-white/80 text-xs font-medium transition-all duration-200 hover:scale-105 group"
                     >
                       <span>View Details</span>

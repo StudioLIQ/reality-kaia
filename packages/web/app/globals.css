@@ -9,6 +9,7 @@
   
   body {
     @apply bg-neutral-950 text-white antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
   
   /* Scrollbar styling */
@@ -48,6 +49,13 @@
   textarea:focus,
   select:focus {
     @apply border-emerald-400/50 bg-white/10;
+  }
+
+  /* Mobile-friendly input sizes to avoid iOS zoom */
+  @media (max-width: 640px) {
+    input, select, textarea {
+      font-size: 16px;
+    }
   }
 }
 
@@ -137,6 +145,16 @@
   @keyframes shimmer {
     100% {
       transform: translateX(100%);
+    }
+  }
+
+  /* Respect reduced motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    *:not(.allow-motion), *:not(.allow-motion)::before, *:not(.allow-motion)::after {
+      animation: none !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }

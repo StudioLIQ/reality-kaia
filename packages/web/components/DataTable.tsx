@@ -12,13 +12,15 @@ export function DataTable({ children }: { children: React.ReactNode }) {
 
 export function Th({ 
   children, 
-  align = 'left' 
+  align = 'left',
+  className = '',
 }: { 
   children: React.ReactNode; 
   align?: 'left' | 'center' | 'right';
+  className?: string;
 }) {
   return (
-    <th className={`bg-white/[0.04] px-4 py-3 font-medium text-white/80 text-${align}`}>
+    <th scope="col" className={`bg-white/[0.04] px-4 py-3 font-medium text-white/80 text-${align} ${className}`}>
       {children}
     </th>
   );
@@ -52,7 +54,10 @@ export function TRow({
   return (
     <tr 
       onClick={onClick}
-      className={`${onClick ? 'hover:bg-white/[0.03] cursor-pointer' : ''} transition-colors ${className}`}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      className={`${onClick ? 'hover:bg-white/[0.03] active:bg-white/[0.06] focus:bg-white/[0.06] cursor-pointer outline-none' : ''} transition-colors ${className}`}
     >
       {children}
     </tr>

@@ -46,6 +46,8 @@ export default function QuestionFilters({
   });
   const [tokenPick, setTokenPick] = useState<TokenPick>("ALL");
   const [filterAddress, setFilterAddress] = useState<string>("");
+  const [pendingAnnounce, setPendingAnnounce] = useState<string>("");
+  const [liveMessage, setLiveMessage] = useState<string>("");
 
   // --- sort state
   const [sortKey, setSortKey] = useState<SortKey>("DEADLINE");
@@ -118,13 +120,28 @@ export default function QuestionFilters({
     onChange(sorted); 
   }, [sorted, onChange]);
 
-  const toggleStatus = (s: QuestionStatus) =>
-    setStatusSet(prev => ({ ...prev, [s]: !prev[s] }));
+  // Announce latest action with current result count
+  useEffect(() => {
+    if (!pendingAnnounce) return;
+    setLiveMessage(`${pendingAnnounce}; ${filtered.length} result${filtered.length === 1 ? '' : 's'}`);
+    const t = setTimeout(() => setLiveMessage(''), 1500);
+    return () => clearTimeout(t);
+  }, [filtered.length, pendingAnnounce]);
 
-  const Chip = ({ active, onClick, children, count }:{
-    active: boolean; onClick: () => void; children: React.ReactNode; count?: number;
+  const toggleStatus = (s: QuestionStatus) =>
+    setStatusSet(prev => {
+      const next = !prev[s];
+      setPendingAnnounce(`${s.charAt(0)}${s.slice(1).toLowerCase()} ${next ? 'included' : 'excluded'}`);
+      return ({ ...prev, [s]: next });
+    });
+
+  const Chip = ({ active, onClick, children, count, ariaLabel }:{
+    active: boolean; onClick: () => void; children: React.ReactNode; count?: number; ariaLabel?: string;
   }) => (
     <button
+      type="button"
+      aria-pressed={active}
+      aria-label={ariaLabel}
       onClick={onClick}
       className={`group px-3 py-1.5 rounded-full border transition-all duration-200 text-sm flex items-center gap-1.5 ${
         active 
@@ -173,13 +190,18 @@ export default function QuestionFilters({
         </h3>
         <span className="text-xs text-white/40">{filtered.length} of {items.length} questions</span>
       </div>
+      {/* Live region announcing result count and actions for screen readers */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {liveMessage || `${filtered.length} result${filtered.length === 1 ? '' : 's'}`}
+      </div>
       
       <div className="flex flex-wrap items-center gap-2">
         {/* Mine only */}
         {isConnected && (
           <Chip
             active={mineOnly}
-            onClick={() => setMineOnly(v => !v)}
+            ariaLabel={`My questions ${mineOnly ? 'enabled' : 'disabled'}`}
+            onClick={() => setMineOnly(v => { const next = !v; setPendingAnnounce(`My questions ${next ? 'enabled' : 'disabled'}`); return next; })}
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -190,23 +212,23 @@ export default function QuestionFilters({
 
         {/* Status chips */}
         <div className="flex flex-wrap gap-2">
-          <Chip active={statusSet.SCHEDULED} onClick={() => toggleStatus("SCHEDULED")} count={statusCounts.SCHEDULED}>
+          <Chip active={statusSet.SCHEDULED} ariaLabel={`Scheduled ${statusSet.SCHEDULED ? 'included' : 'excluded'}`} onClick={() => toggleStatus("SCHEDULED")} count={statusCounts.SCHEDULED}>
             <span className="w-2 h-2 rounded-full bg-blue-400" />
             Scheduled
           </Chip>
-          <Chip active={statusSet.OPEN} onClick={() => toggleStatus("OPEN")} count={statusCounts.OPEN}>
+          <Chip active={statusSet.OPEN} ariaLabel={`Open ${statusSet.OPEN ? 'included' : 'excluded'}`} onClick={() => toggleStatus("OPEN")} count={statusCounts.OPEN}>
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
             Open
           </Chip>
-          <Chip active={statusSet.ANSWERED} onClick={() => toggleStatus("ANSWERED")} count={statusCounts.ANSWERED}>
+          <Chip active={statusSet.ANSWERED} ariaLabel={`Answered ${statusSet.ANSWERED ? 'included' : 'excluded'}`} onClick={() => toggleStatus("ANSWERED")} count={statusCounts.ANSWERED}>
             <span className="w-2 h-2 rounded-full bg-amber-400" />
             Answered
           </Chip>
-          <Chip active={statusSet.FINALIZED} onClick={() => toggleStatus("FINALIZED")} count={statusCounts.FINALIZED}>
+          <Chip active={statusSet.FINALIZED} ariaLabel={`Finalized ${statusSet.FINALIZED ? 'included' : 'excluded'}`} onClick={() => toggleStatus("FINALIZED")} count={statusCounts.FINALIZED}>
             <span className="w-2 h-2 rounded-full bg-white/60" />
             Finalized
           </Chip>
-          <Chip active={statusSet.DISPUTED} onClick={() => toggleStatus("DISPUTED")} count={statusCounts.DISPUTED}>
+          <Chip active={statusSet.DISPUTED} ariaLabel={`Disputed ${statusSet.DISPUTED ? 'included' : 'excluded'}`} onClick={() => toggleStatus("DISPUTED")} count={statusCounts.DISPUTED}>
             <span className="w-2 h-2 rounded-full bg-red-400" />
             Disputed
           </Chip>
@@ -235,7 +257,7 @@ export default function QuestionFilters({
             <svg className="w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <Select value={tokenPick} onChange={(e:any)=> setTokenPick(e.target.value as TokenPick)}>
+            <Select value={tokenPick} onChange={(e:any)=> { const val = e.target.value as TokenPick; setTokenPick(val); setPendingAnnounce(val === 'ALL' ? 'All tokens' : `${val} only`); }}>
               <option value="ALL">All Tokens</option>
               <option value="USDT">USDT Only</option>
               <option value="WKAIA">WKAIA Only</option>
