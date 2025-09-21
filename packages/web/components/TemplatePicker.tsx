@@ -42,18 +42,23 @@ export default function TemplatePicker({
             <div className="text-xs opacity-70 mb-1">Template #{t.id}</div>
             <div className="font-semibold">{t.label}</div>
             <div className="text-sm opacity-80 mt-1 line-clamp-2">{t.summary}</div>
-            {t.badges && (
-              <div className="mt-2 flex gap-2 flex-wrap">
-                {t.badges.map(b => (
-                  <span 
-                    key={b} 
-                    className="text-[10px] rounded-full border border-white/10 px-2 py-0.5 opacity-80"
-                  >
-                    {b}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="mt-2 flex gap-2 flex-wrap">
+              {(t.badges || []).map(b => (
+                <span 
+                  key={b} 
+                  className="text-[10px] rounded-full border border-white/10 px-2 py-0.5 opacity-80"
+                >
+                  {b}
+                </span>
+              ))}
+              {t.recommendedTimeout && (
+                <span
+                  className="text-[10px] rounded-full border border-emerald-400/30 text-emerald-300 px-2 py-0.5"
+                >
+                  Recommended: {t.recommendedTimeout}
+                </span>
+              )}
+            </div>
           </button>
         ))}
       </div>

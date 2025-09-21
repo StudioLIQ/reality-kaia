@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAccount, useWalletClient, useChainId, usePublicClient } from 'wagmi'
 import { parseUnits, keccak256, toBytes, decodeEventLog, encodeAbiParameters } from 'viem'
 import { 
@@ -55,8 +55,8 @@ export default function CreateQuestion() {
     availableTokens.find(t => t.label === 'USDT') || availableTokens[0]
   )
   const [timeoutSec, setTimeoutSec] = useState<number>(TIMEOUT_PRESETS[0].seconds)
-  const [timeoutUnit, setTimeoutUnit] = useState<'s'|'m'|'h'|'d'>('h')
-  const [timeoutInput, setTimeoutInput] = useState<number>(24)
+  const [timeoutUnit, setTimeoutUnit] = useState<'s'|'m'|'h'|'d'>('d')
+  const [timeoutInput, setTimeoutInput] = useState<number>(14)
   const [bondAmount, setBondAmount] = useState<string>('100')
   const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
   const [useNow, setUseNow] = useState(true)
@@ -73,6 +73,11 @@ export default function CreateQuestion() {
   const gated = (status === "NOT_CONNECTED" || status === "WRONG_NETWORK")
   const depsReady = Boolean(addrReady && addr?.reality)
 
+  // Group timeout presets into Recommended vs Advanced for clarity
+  const recommendedLabels = useMemo(() => new Set(['2W', '1M']), [])
+  const recommendedPresets = useMemo(() => TIMEOUT_PRESETS.filter(p => recommendedLabels.has(p.label)), [recommendedLabels])
+  const advancedPresets = useMemo(() => TIMEOUT_PRESETS.filter(p => !recommendedLabels.has(p.label)), [recommendedLabels])
+
   useEffect(() => {
     // quick debug to help diagnose route issues
     console.debug('[create]', { chainId, reality: addr.reality, arbitrator: addr.arbitrator, zapper: addr.zapper });
@@ -82,6 +87,26 @@ export default function CreateQuestion() {
     const sec = Math.max(1, Math.floor(timeoutInput * unitSeconds[timeoutUnit]))
     setTimeoutSec(sec)
   }, [timeoutInput, timeoutUnit])
+
+  // Adjust default timeout based on selected template's recommendation
+  useEffect(() => {
+    const tmpl = templates.find(t => t.id === templateId)
+    const recommended = tmpl?.recommendedTimeout
+    // Resolve label to preset seconds
+    const findPreset = (label: string) => TIMEOUT_PRESETS.find(p => p.label === label)
+    const applyPreset = (seconds: number) => {
+      setTimeoutSec(seconds)
+      setTimeoutUnit('d')
+      setTimeoutInput(Math.max(1, Math.floor(seconds / 86400)))
+    }
+    if (recommended) {
+      const preset = findPreset(recommended)
+      if (preset) applyPreset(preset.seconds)
+    } else {
+      const twoW = findPreset('2W')
+      if (twoW) applyPreset(twoW.seconds)
+    }
+  }, [templateId, templates])
 
   // Calculate fee when bond amount changes
   useEffect(() => {
@@ -635,20 +660,40 @@ export default function CreateQuestion() {
               <label className="block text-sm font-medium text-white">
                 Answer Timeout
               </label>
-              <InfoTooltip content="How long an answer must remain unchallenged before it can be finalized. Longer timeouts provide more security but delay resolution." />
+              <InfoTooltip content="How long an answer must remain unchallenged before it can be finalized. Longer timeouts provide more security but delay resolution. Recommended: 2 weeks–1 month for most questions." />
             </div>
+            <p className="text-xs text-white/50">Recommended: 2 weeks–1 month</p>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {TIMEOUT_PRESETS.map(p => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    className={`px-4 py-2 rounded-lg border transition-all text-sm font-medium ${timeoutSec === p.seconds ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300 shadow-lg shadow-emerald-400/10' : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-white/20'}`}
-                    onClick={() => { setTimeoutSec(p.seconds); setTimeoutInput(p.seconds/3600); setTimeoutUnit('h'); }}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+              <div className="space-y-2">
+                <p className="text-xs text-white/60 font-medium">Recommended</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {recommendedPresets.map(p => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      className={`px-4 py-2 rounded-lg border transition-all text-sm font-medium ${timeoutSec === p.seconds ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300 shadow-lg shadow-emerald-400/10' : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-white/20'}`}
+                      onClick={() => { setTimeoutSec(p.seconds); setTimeoutInput(p.seconds/3600); setTimeoutUnit('h'); }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs text-white/60 font-medium">More options</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {advancedPresets.map(p => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      className={`px-4 py-2 rounded-lg border transition-all text-sm font-medium ${timeoutSec === p.seconds ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300 shadow-lg shadow-emerald-400/10' : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-white/20'}`}
+                      onClick={() => { setTimeoutSec(p.seconds); setTimeoutInput(p.seconds/3600); setTimeoutUnit('h'); }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               
               {/* Custom timeout */}

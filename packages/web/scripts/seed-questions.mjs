@@ -196,6 +196,7 @@ async function findExistingByContent(publicClient, reality, content) {
 }
 
 async function main() {
+  const ALLOW_DUP_CONTENT = process.env.ALLOW_DUP_CONTENT === '1' || process.argv.includes('--allow-dup-content')
   const deploymentsPath = new URL(`../public/deployments/${CHAIN_ID}.json`, import.meta.url)
   const deployments = JSON.parse(await readFile(deploymentsPath, 'utf8'))
   const reality = (deployments.RealitioERC20 || deployments.realitioERC20)
@@ -214,6 +215,8 @@ async function main() {
   const account = PK ? privateKeyToAccount(PK.startsWith('0x') ? PK : `0x${PK}`) : null
   const publicClient = createPublicClient({ transport: http(RPC_URL) })
   const walletClient = account ? createWalletClient({ account, transport: http(RPC_URL) }) : null
+
+  const SUFFIX = (process.env.SEED_SUFFIX || (process.argv.find(a => a.startsWith('--suffix=')) || '').split('=')[1] || '').trim()
 
   const Q = [
     // Template 1: Binary (BTC)
@@ -278,8 +281,23 @@ async function main() {
     },
   ]
 
-  const timeout = 24 * 60 * 60 // 24h
-  const openingTs = 0 // use 0 to mean "now" per contract semantics
+  // opening timestamp: use 0 to mean "now" per contract semantics
+  const openingTs = 0
+  // Deterministic timeout selector per question (2 weeks to 1 month)
+  // Range: [14d, 30d] in seconds. Use contentHash to keep stable across runs.
+  function timeoutFor(contentHash) {
+    const MIN = 14 * 24 * 60 * 60; // 2 weeks
+    const MAX = 30 * 24 * 60 * 60; // ~1 month (30d)
+    const range = MAX - MIN;
+    try {
+      const n = BigInt(contentHash);
+      const t = Number(n % BigInt(range + 1)) + MIN;
+      return t;
+    } catch {
+      // Fallback to mid-range if parsing fails
+      return MIN + Math.floor(range / 2);
+    }
+  }
   const language = 'en'
   const metadataURI = ''
 
@@ -289,10 +307,14 @@ async function main() {
 
   for (const [i, q] of Q.entries()) {
     const outcomesPacked = outcomesJoin(q.outcomes)
-    const contentHash = keccak256(toBytes(q.content))
+    const contentStr = SUFFIX ? `${q.content}\n${SUFFIX}` : q.content
+    const contentHash = keccak256(toBytes(contentStr))
     const nonce = deterministicNonceStable(q.templateId, contentHash)
 
     // Compute the expected questionId to make the operation idempotent
+    // Pick a deterministic timeout per question within [2w, 1m]
+    const timeout = timeoutFor(contentHash)
+
     const questionId = keccak256(encodeAbiParameters([
       { type: 'uint32' },
       { type: 'bytes32' },
@@ -324,9 +346,10 @@ async function main() {
       if (timeoutExisting > 0) exists = true
     } catch {}
 
-    // Fallback: avoid duplicates by content if a different nonce/gen was used before
-    if (!exists) {
-      const byContent = await findExistingByContent(publicClient, reality, q.content)
+    // Fallback: avoid duplicates by content if a different nonce/gen was used before,
+    // unless explicitly allowed via env/flag.
+    if (!exists && !ALLOW_DUP_CONTENT) {
+      const byContent = await findExistingByContent(publicClient, reality, contentStr)
       if (byContent) {
         console.log(`  [${i+1}/${Q.length}] SKIP (content exists) ${q.templateId}: ${q.content.split('\n')[0]}`)
         console.log(`    existing qid: ${byContent}`)
@@ -353,7 +376,7 @@ async function main() {
       args: [
         bondToken,
         q.templateId,
-        q.content,
+        contentStr,
         outcomesPacked,
         arbitrator,
         timeout,
@@ -377,6 +400,7 @@ async function main() {
       }
     }
     console.log(`  [${i+1}/${Q.length}] ${q.templateId}: ${q.content.split('\n')[0]}`)
+    console.log(`    timeout: ${timeout} sec (~${Math.round(timeout/86400)}d)`)
     console.log(`    tx: ${hash}`)
     console.log(`    qid: ${emittedQuestionId || questionId}`)
   }

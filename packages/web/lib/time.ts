@@ -1,4 +1,5 @@
 export const TIMEOUT_PRESETS = [
+  { label: "2W", seconds: 14 * 24 * 3600 },
   { label: "24H", seconds: 24 * 3600 },
   { label: "3D", seconds: 3 * 24 * 3600 },
   { label: "7D", seconds: 7 * 24 * 3600 },

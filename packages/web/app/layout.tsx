@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
 import './globals.css'
 import { WalletProvider } from '@/components/WalletProvider'
 import { DisclaimerProvider } from '@/context/DisclaimerContext'
@@ -8,7 +7,7 @@ import HeaderDisclaimerBar from '@/components/HeaderDisclaimerBar'
 import DisclaimerModal from '@/components/DisclaimerModal'
 import NetworkWatcher from '@/components/NetworkWatcher'
 
-const inter = Inter({ subsets: ['latin'] })
+// Use Tailwind's system font stack to avoid network fetches during build
 
 export const metadata: Metadata = {
   title: {
@@ -52,7 +51,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={inter.className}>
+      <body className="font-sans">
         <DisclaimerProvider>
           <WalletProvider>
             <NetworkWatcher />

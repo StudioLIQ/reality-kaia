@@ -6,6 +6,7 @@ export type TemplateSpec = {
   sample: string;     // example question text
   answerType: "binary" | "multi" | "integer" | "datetime" | "text";
   badges?: string[];
+  recommendedTimeout?: '2W' | '1M';
 };
 
 export const TEMPLATES: TemplateSpec[] = [
@@ -42,6 +43,7 @@ export const TEMPLATES: TemplateSpec[] = [
     ].join("\n\n"),
     answerType: "multi",
     badges: ["Poll"],
+    recommendedTimeout: '1M',
   },
   {
     id: 4,
@@ -76,6 +78,7 @@ export const TEMPLATES: TemplateSpec[] = [
     ].join("\n\n"),
     answerType: "datetime",
     badges: ["UTC"],
+    recommendedTimeout: '1M',
   },
   {
     id: 7,
@@ -93,6 +96,7 @@ export const TEMPLATES: TemplateSpec[] = [
     ].join("\n\n"),
     answerType: "text",
     badges: ["Privacy"],
+    recommendedTimeout: '1M',
   },
 ];
 
