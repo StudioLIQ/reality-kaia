@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { useContractRead, usePublicClient } from 'wagmi'
 import { formatUnits, parseUnits } from 'viem'
 
-export type PaymentMode = 'permit2' | 'permit2612' | 'approve' | 'mixed'
+export type PaymentMode = 'approve'
 
 interface PaymentModeOption {
   id: PaymentMode
@@ -37,58 +37,21 @@ export function PaymentModeSelector({
   decimals = 18,
   symbol = 'TOKEN'
 }: PaymentModeSelectorProps) {
-  const [selectedMode, setSelectedMode] = useState<PaymentMode>('permit2')
+  const [selectedMode, setSelectedMode] = useState<PaymentMode>('approve')
   const [wkaiaAmount, setWkaiaAmount] = useState<bigint>(0n)
   const publicClient = usePublicClient()
   
   // Check if token supports EIP-2612
   const [supportsPermit2612, setSupportsPermit2612] = useState(false)
   
-  useEffect(() => {
-    async function checkPermit2612Support() {
-      if (!publicClient || !bondToken) return
-      
-      try {
-        // Try to call DOMAIN_SEPARATOR (EIP-2612 tokens have this)
-        await publicClient.readContract({
-          address: bondToken,
-          abi: [{
-            name: 'DOMAIN_SEPARATOR',
-            type: 'function',
-            stateMutability: 'view',
-            inputs: [],
-            outputs: [{ type: 'bytes32' }]
-          }],
-          functionName: 'DOMAIN_SEPARATOR'
-        })
-        setSupportsPermit2612(true)
-      } catch {
-        setSupportsPermit2612(false)
-      }
-    }
-    
-    checkPermit2612Support()
-  }, [bondToken, publicClient])
+  // Permit modes are disabled by request; no capability checks
   
-  const hasPermit2 = Boolean(deployments?.PERMIT2)
+  const hasPermit2 = false
   const hasZapper = Boolean(deployments?.zapperWKAIA)
   const isWKAIA = bondToken?.toLowerCase() === deployments?.WKAIA?.toLowerCase()
   
   const paymentModes: PaymentModeOption[] = [
-    {
-      id: 'permit2',
-      name: 'Permit2',
-      description: 'Sign off-chain, submit in 1 transaction (recommended)',
-      transactions: 1,
-      available: hasPermit2
-    },
-    {
-      id: 'permit2612',
-      name: 'Permit (EIP-2612)',
-      description: 'Sign off-chain, submit in 1 transaction',
-      transactions: 1,
-      available: supportsPermit2612
-    },
+    // Permit modes disabled
     {
       id: 'approve',
       name: 'Traditional Approve',
@@ -96,21 +59,14 @@ export function PaymentModeSelector({
       transactions: 2,
       available: true
     },
-    {
-      id: 'mixed',
-      name: 'Mixed (WKAIA + KAIA)',
-      description: 'Use WKAIA first, auto-wrap KAIA for remainder',
-      transactions: 1,
-      available: isWKAIA && hasZapper
-    }
+    // Mixed uses Permit2; disabled as well
   ]
   
   // Find first available mode
   useEffect(() => {
-    const firstAvailable = paymentModes.find(m => m.available)?.id || 'approve'
-    setSelectedMode(firstAvailable)
-    onModeChange(firstAvailable)
-  }, [hasPermit2, supportsPermit2612])
+    setSelectedMode('approve')
+    onModeChange('approve')
+  }, [])
   
   const total = bondAmount + feeAmount
   
@@ -136,11 +92,7 @@ export function PaymentModeSelector({
       
       <div>
         <h3 className="text-sm font-medium text-white mb-2">Payment Method</h3>
-        {!hasPermit2 && (
-          <div className="mb-3 rounded-md border border-amber-400/30 bg-amber-400/10 text-amber-300 px-3 py-2 text-xs">
-            Permit2 address missing on this network; Permit2 option is disabled.
-          </div>
-        )}
+        {/* Permit options disabled intentionally */}
         
         <RadioGroup value={selectedMode} onChange={(value) => {
           setSelectedMode(value)

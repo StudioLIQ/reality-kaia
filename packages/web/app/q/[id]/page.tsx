@@ -10,8 +10,8 @@ import { useAddresses } from '@/lib/contracts.client'
 import { CHAIN_LABEL } from '@/lib/viem'
 import { networkStatus, KAIA_MAINNET_ID, KAIA_TESTNET_ID } from '@/lib/chain'
 import { PaymentModeSelector, type PaymentMode } from '@/components/PaymentModeSelector'
-import { usePermit2, usePermit2612 } from '@/hooks/usePermit2'
 import { quoteFee } from '@/lib/fees'
+import { usePermit2, usePermit2612 } from '@/hooks/usePermit2'
 import { SignatureTransfer } from '@uniswap/permit2-sdk'
 import { createPermitTransferFrom } from '@/lib/permit'
 import FeeNotice from '@/components/FeeNotice'
@@ -55,7 +55,7 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
   
   const [bondTokenInfo, setBondTokenInfo] = useState<BondToken | null>(null)
   const [feeInfo, setFeeInfo] = useState<{ feeBps: number; feeRecipient: string } | null>(null)
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('permit2')
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('approve')
   const [deploymentsState, setDeploymentsState] = useState<any>(null)
   const [feeQuote, setFeeQuote] = useState<{ feeFormatted: string; totalFormatted: string } | null>(null)
   const [wkaiaAmount, setWkaiaAmount] = useState<bigint>(0n)
@@ -198,14 +198,13 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
     return () => clearInterval(interval)
   }, [questionId, addr.reality, loadQuestion])
 
-  // Initialize Permit2 hooks
+  // Initialize Permit2 hooks (kept to satisfy types; options disabled in UI)
   const { signPermit2 } = usePermit2({
     bondToken: (question?.bondToken || '0x0000000000000000000000000000000000000000') as `0x${string}`,
     realitioAddress: (addr.reality || '0x0000000000000000000000000000000000000000') as `0x${string}`,
     permit2Address: (deploymentsState?.PERMIT2 || '0x0000000000000000000000000000000000000000') as `0x${string}`,
     chainId
   })
-  
   const { signPermit2612 } = usePermit2612({
     bondToken: (question?.bondToken || '0x0000000000000000000000000000000000000000') as `0x${string}`,
     realitioAddress: (addr.reality || '0x0000000000000000000000000000000000000000') as `0x${string}`,
@@ -269,113 +268,35 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
         )
         
         if (paymentMode === 'permit2' && deploymentsState?.PERMIT2) {
-          // Use Permit2
-          const { permit, signature } = await signPermit2(totalAmount)
-          await walletClient.writeContract({
-            address: addr.reality as `0x${string}`,
-            abi: REALITIO_ABI,
-            functionName: 'submitAnswerCommitmentWithPermit2',
-            args: [questionId, answerHash, bondAmount, permit, signature, address],
-          })
+          // Verify Permit2 actually deployed; otherwise fallback
+          const code = await publicClient?.getBytecode({ address: deploymentsState.PERMIT2 as `0x${string}` })
+          const hasPermit2 = Boolean(code && code !== '0x')
+          if (hasPermit2) {
+            try {
+              const { permit, signature } = await signPermit2(totalAmount)
+              await walletClient.writeContract({
+                address: addr.reality as `0x${string}`,
+                abi: REALITIO_ABI,
+                functionName: 'submitAnswerCommitmentWithPermit2',
+                args: [questionId, answerHash, bondAmount, permit, signature, address],
+              })
+              return
+            } catch (e: any) {
+              const msg = (e?.message || '').toString()
+              console.warn('Permit2 commit path failed, falling back:', msg)
+              // Fall through to other branches
+            }
+          }
         } else if (paymentMode === 'permit2612') {
           // Use EIP-2612 Permit
           const { deadline, v, r, s } = await signPermit2612(totalAmount)
-          const bondToken = question.bondToken || deploymentsState?.USDT || '0x0000000000000000000000000000000000000000'
           await walletClient.writeContract({
             address: addr.reality as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'submitAnswerCommitmentWithPermit2612',
-            args: [questionId, answerHash, bondAmount, bondToken as `0x${string}`, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`],
+            args: [questionId, answerHash, bondAmount, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`, address],
           })
-        } else if (paymentMode === 'mixed' && addr.zapper) {
-          // Use Mixed (WKAIA + KAIA) payment via Zapper
-          const desiredWkaia = wkaiaAmount > totalAmount ? totalAmount : wkaiaAmount
-          const remainderKaia = totalAmount > desiredWkaia ? totalAmount - desiredWkaia : 0n
-          
-          let permit = null
-          let signature: `0x${string}` = '0x'
-          
-          if (desiredWkaia > 0n) {
-            // Create Permit2 signature for WKAIA portion
-            const nonce = BigInt(Math.floor(Math.random() * 2**48))
-            const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600)
-            permit = {
-              permitted: {
-                token: addr.wkaia!,
-                amount: desiredWkaia
-              },
-              spender: addr.zapper!,
-              nonce,
-              deadline
-            }
-            const permitData = SignatureTransfer.getPermitData(permit, addr.permit2!, chainId)
-            signature = await walletClient.signTypedData({
-              domain: {
-                name: permitData.domain.name,
-                version: permitData.domain.version,
-                chainId: Number(permitData.domain.chainId),
-                verifyingContract: permitData.domain.verifyingContract as `0x${string}`,
-                ...(permitData.domain.salt && { salt: permitData.domain.salt as `0x${string}` })
-              },
-              types: permitData.types,
-              primaryType: 'PermitTransferFrom',
-              message: permitData.values as any,
-              account: address
-            })
-          } else {
-            // No WKAIA, create dummy permit
-            permit = {
-              permitted: {
-                token: addr.wkaia || '0x0000000000000000000000000000000000000000',
-                amount: 0n
-              },
-              spender: addr.zapper!,
-              nonce: 0n,
-              deadline: BigInt(Math.floor(Date.now() / 1000) + 3600)
-            }
-          }
-          
-          // Import ZAPPER_WKAIA_ABI if not imported yet
-          const ZAPPER_WKAIA_ABI = [
-            {
-              "type": "function",
-              "name": "commitMixedWithPermit2",
-              "inputs": [
-                {"name": "qid", "type": "bytes32"},
-                {"name": "commitment", "type": "bytes32"},
-                {"name": "bond", "type": "uint256"},
-                {
-                  "name": "permit",
-                  "type": "tuple",
-                  "components": [
-                    {
-                      "name": "permitted",
-                      "type": "tuple",
-                      "components": [
-                        {"name": "token", "type": "address"},
-                        {"name": "amount", "type": "uint256"}
-                      ]
-                    },
-                    {"name": "nonce", "type": "uint256"},
-                    {"name": "deadline", "type": "uint256"}
-                  ]
-                },
-                {"name": "signature", "type": "bytes"},
-                {"name": "owner", "type": "address"},
-                {"name": "wkaiaMaxFromPermit", "type": "uint256"}
-              ],
-              "outputs": [],
-              "stateMutability": "payable"
-            }
-          ] as const
-          
-          await walletClient.writeContract({
-            address: addr.zapper as `0x${string}`,
-            abi: ZAPPER_WKAIA_ABI,
-            functionName: 'commitMixedWithPermit2',
-            args: [questionId, answerHash, bondAmount, permit, signature, address, desiredWkaia],
-            value: remainderKaia
-          })
+          return
         } else {
           // Traditional approve flow
           if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
@@ -396,136 +317,56 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
       } else {
         // Submit answer directly
         if (paymentMode === 'permit2' && deploymentsState?.PERMIT2) {
-          // Use Permit2
-          const { permit, signature } = await signPermit2(totalAmount)
-          await walletClient.writeContract({
-            address: addr.reality as `0x${string}`,
-            abi: REALITIO_ABI,
-            functionName: 'submitAnswerWithPermit2',
-            args: [questionId, answerBytes, bondAmount, permit, signature, address],
-          })
+          // Verify Permit2 actually deployed; otherwise fallback
+          const code = await publicClient?.getBytecode({ address: deploymentsState.PERMIT2 as `0x${string}` })
+          const hasPermit2 = Boolean(code && code !== '0x')
+          if (hasPermit2) {
+            try {
+              const { permit, signature } = await signPermit2(totalAmount)
+              await walletClient.writeContract({
+                address: addr.reality as `0x${string}`,
+                abi: REALITIO_ABI,
+                functionName: 'submitAnswerWithPermit2',
+                args: [questionId, answerBytes, bondAmount, permit, signature, address],
+              })
+              return
+            } catch (e: any) {
+              const msg = (e?.message || '').toString()
+              console.warn('Permit2 answer path failed, falling back:', msg)
+              // Fall through to other branches
+            }
+          }
         } else if (paymentMode === 'permit2612') {
           // Use EIP-2612 Permit
           const { deadline, v, r, s } = await signPermit2612(totalAmount)
-          const bondToken = question.bondToken || deploymentsState?.USDT || '0x0000000000000000000000000000000000000000'
           await walletClient.writeContract({
             address: addr.reality as `0x${string}`,
             abi: REALITIO_ABI,
             functionName: 'submitAnswerWithPermit2612',
-            args: [questionId, answerBytes, bondAmount, bondToken as `0x${string}`, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`],
+            args: [questionId, answerBytes, bondAmount, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`, address],
           })
-        } else if (paymentMode === 'mixed' && addr.zapper) {
-          // Use Mixed (WKAIA + KAIA) payment via Zapper
-          const desiredWkaia = wkaiaAmount > totalAmount ? totalAmount : wkaiaAmount
-          const remainderKaia = totalAmount > desiredWkaia ? totalAmount - desiredWkaia : 0n
-          
-          let permit = null
-          let signature: `0x${string}` = '0x'
-          
-          if (desiredWkaia > 0n) {
-            // Create Permit2 signature for WKAIA portion
-            const nonce = BigInt(Math.floor(Math.random() * 2**48))
-            const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600)
-            permit = {
-              permitted: {
-                token: addr.wkaia!,
-                amount: desiredWkaia
-              },
-              spender: addr.zapper!,
-              nonce,
-              deadline
-            }
-            const permitData = SignatureTransfer.getPermitData(permit, addr.permit2!, chainId)
-            signature = await walletClient.signTypedData({
-              domain: {
-                name: permitData.domain.name,
-                version: permitData.domain.version,
-                chainId: Number(permitData.domain.chainId),
-                verifyingContract: permitData.domain.verifyingContract as `0x${string}`,
-                ...(permitData.domain.salt && { salt: permitData.domain.salt as `0x${string}` })
-              },
-              types: permitData.types,
-              primaryType: 'PermitTransferFrom',
-              message: permitData.values as any,
-              account: address
-            })
-          } else {
-            // No WKAIA, create dummy permit
-            permit = {
-              permitted: {
-                token: addr.wkaia || '0x0000000000000000000000000000000000000000',
-                amount: 0n
-              },
-              spender: addr.zapper!,
-              nonce: 0n,
-              deadline: BigInt(Math.floor(Date.now() / 1000) + 3600)
-            }
-          }
-          
-          // Import ZAPPER_WKAIA_ABI if not imported yet
-          const ZAPPER_WKAIA_ABI = [
-            {
-              "type": "function",
-              "name": "answerMixedWithPermit2",
-              "inputs": [
-                {"name": "qid", "type": "bytes32"},
-                {"name": "answer", "type": "bytes32"},
-                {"name": "bond", "type": "uint256"},
-                {
-                  "name": "permit",
-                  "type": "tuple",
-                  "components": [
-                    {
-                      "name": "permitted",
-                      "type": "tuple",
-                      "components": [
-                        {"name": "token", "type": "address"},
-                        {"name": "amount", "type": "uint256"}
-                      ]
-                    },
-                    {"name": "nonce", "type": "uint256"},
-                    {"name": "deadline", "type": "uint256"}
-                  ]
-                },
-                {"name": "signature", "type": "bytes"},
-                {"name": "owner", "type": "address"},
-                {"name": "wkaiaMaxFromPermit", "type": "uint256"}
-              ],
-              "outputs": [],
-              "stateMutability": "payable"
-            }
-          ] as const
-          
-          await walletClient.writeContract({
-            address: addr.zapper as `0x${string}`,
-            abi: ZAPPER_WKAIA_ABI,
-            functionName: 'answerMixedWithPermit2',
-            args: [questionId, answerBytes, bondAmount, permit, signature, address, desiredWkaia],
-            value: remainderKaia
-          })
+          return
         } else {
-          // Traditional approve flow
-          if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
-            await walletClient.writeContract({
-              address: question.bondToken as `0x${string}`,
-              abi: ERC20_ABI,
-              functionName: 'approve',
-              args: [addr.reality as `0x${string}`, totalAmount],
-            })
-            await walletClient.writeContract({
-              address: addr.reality as `0x${string}`,
-              abi: REALITIO_ABI,
-              functionName: 'submitAnswerWithToken',
-              args: [questionId, answerBytes, bondAmount, question.bondToken as `0x${string}`],
-            })
-          } else {
-            await walletClient.writeContract({
-              address: addr.reality as `0x${string}`,
-              abi: REALITIO_ABI,
-              functionName: 'submitAnswer',
-              args: [questionId, answerBytes, bondAmount],
-            })
-          }
+          // Traditional approve flow (fallback)
+          const chosenToken = (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000')
+            ? question.bondToken as `0x${string}`
+            : (deploymentsState?.USDT || deploymentsState?.MockUSDT) as `0x${string}`
+
+          if (!chosenToken) throw new Error('No bond token available for approve flow')
+
+          await walletClient.writeContract({
+            address: chosenToken,
+            abi: ERC20_ABI,
+            functionName: 'approve',
+            args: [addr.reality as `0x${string}`, totalAmount],
+          })
+          await walletClient.writeContract({
+            address: addr.reality as `0x${string}`,
+            abi: REALITIO_ABI,
+            functionName: 'submitAnswerWithToken',
+            args: [questionId, answerBytes, bondAmount, chosenToken],
+          })
+        }
         }
       }
       

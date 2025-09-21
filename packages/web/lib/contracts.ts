@@ -62,19 +62,19 @@ export const REALITIO_ABI = [
               { "internalType": "address", "name": "token", "type": "address" },
               { "internalType": "uint256", "name": "amount", "type": "uint256" }
             ],
-            "internalType": "struct ISignatureTransfer.TokenPermissions",
+            "internalType": "struct IPermit2.TokenPermissions",
             "name": "permitted",
             "type": "tuple"
           },
           { "internalType": "uint256", "name": "nonce", "type": "uint256" },
           { "internalType": "uint256", "name": "deadline", "type": "uint256" }
         ],
-        "internalType": "struct ISignatureTransfer.PermitTransferFrom",
+        "internalType": "struct IPermit2.PermitTransferFrom",
         "name": "permit",
         "type": "tuple"
       },
       { "internalType": "bytes", "name": "signature", "type": "bytes" },
-      { "internalType": "address", "name": "bondToken", "type": "address" }
+      { "internalType": "address", "name": "owner", "type": "address" }
     ],
     "name": "submitAnswerWithPermit2",
     "outputs": [],
@@ -93,19 +93,19 @@ export const REALITIO_ABI = [
               { "internalType": "address", "name": "token", "type": "address" },
               { "internalType": "uint256", "name": "amount", "type": "uint256" }
             ],
-            "internalType": "struct ISignatureTransfer.TokenPermissions",
+            "internalType": "struct IPermit2.TokenPermissions",
             "name": "permitted",
             "type": "tuple"
           },
           { "internalType": "uint256", "name": "nonce", "type": "uint256" },
           { "internalType": "uint256", "name": "deadline", "type": "uint256" }
         ],
-        "internalType": "struct ISignatureTransfer.PermitTransferFrom",
+        "internalType": "struct IPermit2.PermitTransferFrom",
         "name": "permit",
         "type": "tuple"
       },
       { "internalType": "bytes", "name": "signature", "type": "bytes" },
-      { "internalType": "address", "name": "bondToken", "type": "address" }
+      { "internalType": "address", "name": "owner", "type": "address" }
     ],
     "name": "submitAnswerCommitmentWithPermit2",
     "outputs": [],
@@ -117,11 +117,11 @@ export const REALITIO_ABI = [
       { "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
       { "internalType": "bytes32", "name": "answer", "type": "bytes32" },
       { "internalType": "uint256", "name": "bond", "type": "uint256" },
-      { "internalType": "address", "name": "bondToken", "type": "address" },
       { "internalType": "uint256", "name": "deadline", "type": "uint256" },
       { "internalType": "uint8", "name": "v", "type": "uint8" },
       { "internalType": "bytes32", "name": "r", "type": "bytes32" },
-      { "internalType": "bytes32", "name": "s", "type": "bytes32" }
+      { "internalType": "bytes32", "name": "s", "type": "bytes32" },
+      { "internalType": "address", "name": "owner", "type": "address" }
     ],
     "name": "submitAnswerWithPermit2612",
     "outputs": [],
@@ -133,11 +133,11 @@ export const REALITIO_ABI = [
       { "internalType": "bytes32", "name": "questionId", "type": "bytes32" },
       { "internalType": "bytes32", "name": "answerHash", "type": "bytes32" },
       { "internalType": "uint256", "name": "bond", "type": "uint256" },
-      { "internalType": "address", "name": "bondToken", "type": "address" },
       { "internalType": "uint256", "name": "deadline", "type": "uint256" },
       { "internalType": "uint8", "name": "v", "type": "uint8" },
       { "internalType": "bytes32", "name": "r", "type": "bytes32" },
-      { "internalType": "bytes32", "name": "s", "type": "bytes32" }
+      { "internalType": "bytes32", "name": "s", "type": "bytes32" },
+      { "internalType": "address", "name": "owner", "type": "address" }
     ],
     "name": "submitAnswerCommitmentWithPermit2612",
     "outputs": [],
