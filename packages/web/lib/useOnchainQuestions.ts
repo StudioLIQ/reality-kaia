@@ -7,6 +7,7 @@ import { useAddresses } from "@/lib/contracts.client";
 import { realityV3Abi } from "@/lib/abi/realityV3";
 import { realityAbi } from "@/lib/abi/reality";
 import { realityV2Abi } from "@/lib/abi/realityV2";
+import { REALITIO_ABI } from "@/lib/contracts";
 
 type Full = {
   id: `0x${string}`;
@@ -234,7 +235,7 @@ export function useOnchainQuestions(pageSize = 20) {
     const offset = p * pageSize;
     const pagedLogs = sortedLogs.slice(offset, offset + pageSize);
     
-    // For each question, try to get V2 metadata or fallback to basic info
+    // For each question, try to get V2 metadata, then enrich with base contract runtime (bestBond etc)
     const questions: Full[] = [];
     for (const log of pagedLogs) {
       // Extract question ID from topics (first indexed param)
@@ -298,6 +299,27 @@ export function useOnchainQuestions(pageSize = 20) {
         };
       }
       
+      // Enrich with base getQuestion runtime info (bestBond, lastAnswerTs, finalized)
+      try {
+        const gq = await client.readContract({
+          address: addr.reality!,
+          abi: REALITIO_ABI as any,
+          functionName: 'getQuestion',
+          args: [qid]
+        }) as any[];
+        if (gq && gq.length >= 10) {
+          // getQuestion returns: arbitrator(0), bondToken(1), timeout(2), openingTs(3), contentHash(4), bestAnswer(5), bestBond(6), bestAnswerer(7), lastAnswerTs(8), finalized(9)
+          const bestBond = gq[6] as bigint;
+          const bondToken = gq[1] as `0x${string}`;
+          const lastAnswerTs = Number(gq[8] || 0);
+          const finalized = Boolean(gq[9]);
+          questionData.bestBond = bestBond || 0n;
+          questionData.bondToken = bondToken || questionData.bondToken;
+          questionData.lastAnswerTs = lastAnswerTs || questionData.lastAnswerTs;
+          questionData.finalized = finalized;
+        }
+      } catch {}
+
       questions.push(questionData);
     }
     
