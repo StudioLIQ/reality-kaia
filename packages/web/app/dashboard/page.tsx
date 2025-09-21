@@ -168,7 +168,7 @@ export default function DashboardPage() {
             <tr>
               <Th>Question</Th>
               <Th>Status</Th>
-              <Th align="right" className="hidden sm:table-cell">Current Bond</Th>
+              <Th align="right">Current Bond</Th>
               <Th align="center" className="hidden sm:table-cell">Deadline</Th>
               <Th align="center">Action</Th>
             </tr>
@@ -222,7 +222,7 @@ export default function DashboardPage() {
                       {getStatusStyle(status).label}
                     </span>
                   </Td>
-                  <Td align="right" className="hidden sm:table-cell">
+                  <Td align="right">
                     <div className="text-sm">
                       {(() => {
                         const raw = q.currentBondRaw as any as bigint | undefined;
@@ -238,7 +238,7 @@ export default function DashboardPage() {
                             </span>
                             {q.bondTokenSymbol && (
                               <span className="text-[10px] text-white/40 uppercase">
-                                Min next: {formatTokenAmount(raw * 2n, d, '', { compact: true })}
+                                Min next: {formatTokenAmount(raw * 2n, d, sym, { compact: true })}
                               </span>
                             )}
                           </div>

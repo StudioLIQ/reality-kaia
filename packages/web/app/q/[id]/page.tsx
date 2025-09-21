@@ -267,107 +267,42 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
           )
         )
         
-        if (paymentMode === 'permit2' && deploymentsState?.PERMIT2) {
-          // Verify Permit2 actually deployed; otherwise fallback
-          const code = await publicClient?.getBytecode({ address: deploymentsState.PERMIT2 as `0x${string}` })
-          const hasPermit2 = Boolean(code && code !== '0x')
-          if (hasPermit2) {
-            try {
-              const { permit, signature } = await signPermit2(totalAmount)
-              await walletClient.writeContract({
-                address: addr.reality as `0x${string}`,
-                abi: REALITIO_ABI,
-                functionName: 'submitAnswerCommitmentWithPermit2',
-                args: [questionId, answerHash, bondAmount, permit, signature, address],
-              })
-              return
-            } catch (e: any) {
-              const msg = (e?.message || '').toString()
-              console.warn('Permit2 commit path failed, falling back:', msg)
-              // Fall through to other branches
-            }
-          }
-        } else if (paymentMode === 'permit2612') {
-          // Use EIP-2612 Permit
-          const { deadline, v, r, s } = await signPermit2612(totalAmount)
+        // Classic approve-only flow for commitment
+        if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
           await walletClient.writeContract({
-            address: addr.reality as `0x${string}`,
-            abi: REALITIO_ABI,
-            functionName: 'submitAnswerCommitmentWithPermit2612',
-            args: [questionId, answerHash, bondAmount, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`, address],
-          })
-          return
-        } else {
-          // Traditional approve flow
-          if (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000') {
-            await walletClient.writeContract({
-              address: question.bondToken as `0x${string}`,
-              abi: ERC20_ABI,
-              functionName: 'approve',
-              args: [addr.reality as `0x${string}`, totalAmount],
-            })
-          }
-          await walletClient.writeContract({
-            address: addr.reality as `0x${string}`,
-            abi: REALITIO_ABI,
-            functionName: 'submitAnswerCommitment',
-            args: [questionId, answerHash, bondAmount],
-          })
-        }
-      } else {
-        // Submit answer directly
-        if (paymentMode === 'permit2' && deploymentsState?.PERMIT2) {
-          // Verify Permit2 actually deployed; otherwise fallback
-          const code = await publicClient?.getBytecode({ address: deploymentsState.PERMIT2 as `0x${string}` })
-          const hasPermit2 = Boolean(code && code !== '0x')
-          if (hasPermit2) {
-            try {
-              const { permit, signature } = await signPermit2(totalAmount)
-              await walletClient.writeContract({
-                address: addr.reality as `0x${string}`,
-                abi: REALITIO_ABI,
-                functionName: 'submitAnswerWithPermit2',
-                args: [questionId, answerBytes, bondAmount, permit, signature, address],
-              })
-              return
-            } catch (e: any) {
-              const msg = (e?.message || '').toString()
-              console.warn('Permit2 answer path failed, falling back:', msg)
-              // Fall through to other branches
-            }
-          }
-        } else if (paymentMode === 'permit2612') {
-          // Use EIP-2612 Permit
-          const { deadline, v, r, s } = await signPermit2612(totalAmount)
-          await walletClient.writeContract({
-            address: addr.reality as `0x${string}`,
-            abi: REALITIO_ABI,
-            functionName: 'submitAnswerWithPermit2612',
-            args: [questionId, answerBytes, bondAmount, deadline as bigint, v, r as `0x${string}`, s as `0x${string}`, address],
-          })
-          return
-        } else {
-          // Traditional approve flow (fallback)
-          const chosenToken = (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000')
-            ? question.bondToken as `0x${string}`
-            : (deploymentsState?.USDT || deploymentsState?.MockUSDT) as `0x${string}`
-
-          if (!chosenToken) throw new Error('No bond token available for approve flow')
-
-          await walletClient.writeContract({
-            address: chosenToken,
+            address: question.bondToken as `0x${string}`,
             abi: ERC20_ABI,
             functionName: 'approve',
             args: [addr.reality as `0x${string}`, totalAmount],
           })
-          await walletClient.writeContract({
-            address: addr.reality as `0x${string}`,
-            abi: REALITIO_ABI,
-            functionName: 'submitAnswerWithToken',
-            args: [questionId, answerBytes, bondAmount, chosenToken],
-          })
         }
-        }
+        await walletClient.writeContract({
+          address: addr.reality as `0x${string}`,
+          abi: REALITIO_ABI,
+          functionName: 'submitAnswerCommitment',
+          args: [questionId, answerHash, bondAmount],
+        })
+      } else {
+        // Submit answer directly
+        // Classic approve-only flow for direct answer
+        const chosenToken = (question.bondToken && question.bondToken !== '0x0000000000000000000000000000000000000000')
+          ? question.bondToken as `0x${string}`
+          : (deploymentsState?.USDT || deploymentsState?.MockUSDT) as `0x${string}`
+
+        if (!chosenToken) throw new Error('No bond token available for approve flow')
+
+        await walletClient.writeContract({
+          address: chosenToken,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [addr.reality as `0x${string}`, totalAmount],
+        })
+        await walletClient.writeContract({
+          address: addr.reality as `0x${string}`,
+          abi: REALITIO_ABI,
+          functionName: 'submitAnswerWithToken',
+          args: [questionId, answerBytes, bondAmount, chosenToken],
+        })
       }
       
       await loadQuestion()
@@ -901,19 +836,16 @@ export default function QuestionDetail(props: { params: Promise<{ id: string }> 
                         <DisclaimerBadge compact />
                         <button
                           onClick={handleSubmitAnswer}
-                          disabled={actionLoading || !address || gated || !addr.reality || (paymentMode === 'permit2' && !deployments?.PERMIT2)}
+                          disabled={actionLoading || !address || gated || !addr.reality}
                           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {actionLoading ? 'Submitting...' : 'Submit Answer'}
                         </button>
                       </div>
                     </DisclaimerGate>
-                    {(!addr.reality || (paymentMode === 'permit2' && !deployments?.PERMIT2)) && (
+                    {!addr.reality && (
                       <div className="mt-2 text-xs text-red-300">
-                        {!addr.reality && <p>Missing Realitio contract address for this network.</p>}
-                        {paymentMode === 'permit2' && !deployments?.PERMIT2 && (
-                          <p>Permit2 is not available on this network. Choose another method.</p>
-                        )}
+                        <p>Missing Realitio contract address for this network.</p>
                       </div>
                     )}
                   </div>

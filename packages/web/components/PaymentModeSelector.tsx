@@ -121,11 +121,6 @@ export function PaymentModeSelector({
                           className={`font-medium ${mode.available ? 'text-white' : 'text-white/50'}`}
                         >
                           {mode.name}
-                          {mode.id === 'permit2' && hasPermit2 && (
-                            <span className="ml-2 text-xs border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 px-2 py-0.5 rounded">
-                              Recommended
-                            </span>
-                          )}
                         </RadioGroup.Label>
                         <RadioGroup.Description
                           as="span"
@@ -147,7 +142,7 @@ export function PaymentModeSelector({
           </div>
         </RadioGroup>
         
-        {selectedMode === 'mixed' && isWKAIA && (
+        {false && (
           <div className="mt-4 p-4 rounded-lg border border-amber-400/30 bg-amber-400/10">
             <h4 className="text-sm font-medium text-amber-300 mb-2">Mixed Payment Configuration</h4>
             <div className="space-y-3">
